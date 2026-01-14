@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -9,6 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { getUser, resetDemo } from './lib/userStore';
 
 const COMMON_EXERCISES = [
   'Squat',
@@ -61,10 +62,17 @@ const TrophyIcon = ({ active }) => (
   </svg>
 );
 
+const UserIcon = ({ active }) => (
+  <svg className={`w-6 h-6 ${active ? 'text-[#FFD700]' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+  </svg>
+);
+
 export default function ProgressiveOverloadTracker() {
   const [entries, setEntries] = useState([]);
   const [activeTab, setActiveTab] = useState('add');
   const [flashingEntryId, setFlashingEntryId] = useState(null);
+  const [user, setUser] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     customName: '',
@@ -75,6 +83,11 @@ export default function ProgressiveOverloadTracker() {
   });
   const [errors, setErrors] = useState({});
   const [useCustomName, setUseCustomName] = useState(false);
+
+  // Load user on mount
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
 
   // Calculate PRs per exercise
   const personalRecords = useMemo(() => {
@@ -559,6 +572,106 @@ export default function ProgressiveOverloadTracker() {
     </div>
   );
 
+  // Profile View
+  const ProfileView = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-white">Profile</h2>
+
+      {user ? (
+        <>
+          {/* Profile Card */}
+          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+            <div className="flex items-start gap-5">
+              {/* Avatar */}
+              <div className="flex-shrink-0">
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-24 h-24 rounded-full border-4 border-[#FFD700] object-cover"
+                  data-testid="profile-avatar"
+                />
+              </div>
+
+              {/* Details */}
+              <div className="flex-1 min-w-0">
+                <h3
+                  className="text-xl font-bold text-white truncate"
+                  data-testid="profile-name"
+                >
+                  {user.name}
+                </h3>
+                <p className="text-[#FFD700] font-medium mt-1" data-testid="profile-job">
+                  {user.jobTitle}
+                </p>
+                <p className="text-gray-400 text-sm mt-1 truncate" data-testid="profile-email">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+
+            {/* Bio */}
+            <div className="mt-5 pt-5 border-t border-[#0f3460]">
+              <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                About
+              </h4>
+              <p className="text-gray-300 text-sm leading-relaxed" data-testid="profile-bio">
+                {user.bio}
+              </p>
+            </div>
+          </div>
+
+          {/* Account Info */}
+          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Account Info</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-[#0f3460]">
+                <span className="text-gray-400">User ID</span>
+                <span className="text-white font-mono text-sm">{user.id.slice(0, 8)}...</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-[#0f3460]">
+                <span className="text-gray-400">Member Since</span>
+                <span className="text-white">
+                  {new Date(user.createdAt).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-gray-400">Total Workouts</span>
+                <span className="text-[#FFD700] font-bold">{entries.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Reset Demo Button */}
+          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+            <h3 className="text-lg font-semibold mb-2 text-white">Demo Mode</h3>
+            <p className="text-gray-400 text-sm mb-4">
+              This is a demo profile generated with fake data. Reset to generate a new identity.
+            </p>
+            <button
+              onClick={resetDemo}
+              className="w-full bg-red-600/20 text-red-400 font-semibold py-3 rounded-md hover:bg-red-600/30 transition-colors border border-red-600/30"
+              data-testid="reset-demo-button"
+            >
+              Reset Demo
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="bg-[#16213e] rounded-lg p-8 border border-[#0f3460] text-center">
+          <div className="animate-pulse">
+            <div className="w-24 h-24 bg-[#0f3460] rounded-full mx-auto mb-4" />
+            <div className="h-6 bg-[#0f3460] rounded w-48 mx-auto mb-2" />
+            <div className="h-4 bg-[#0f3460] rounded w-32 mx-auto" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#1a1a2e] text-gray-100 pb-20">
       {/* Header */}
@@ -575,6 +688,7 @@ export default function ProgressiveOverloadTracker() {
         {activeTab === 'progress' && <ProgressView />}
         {activeTab === 'add' && <AddWorkoutView />}
         {activeTab === 'achievements' && <AchievementsView />}
+        {activeTab === 'profile' && <ProfileView />}
       </main>
 
       {/* Bottom Navigation */}
@@ -606,6 +720,15 @@ export default function ProgressiveOverloadTracker() {
           >
             <TrophyIcon active={activeTab === 'achievements'} />
             <span className="text-xs font-medium">Achievements</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
+              activeTab === 'profile' ? 'text-[#FFD700]' : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            <UserIcon active={activeTab === 'profile'} />
+            <span className="text-xs font-medium">Profile</span>
           </button>
         </div>
       </nav>
