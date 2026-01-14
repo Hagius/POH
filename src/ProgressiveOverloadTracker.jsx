@@ -10,7 +10,7 @@ import {
   ReferenceArea,
   ReferenceLine,
 } from 'recharts';
-import { getUser, getEntries, saveEntries, resetDemo } from './lib/userStore';
+import { getUser, getEntries, saveEntries, saveUser, resetDemo } from './lib/userStore';
 import {
   getStrengthThresholds,
   getStrengthLevel,
@@ -273,6 +273,13 @@ export default function ProgressiveOverloadTracker() {
 
   const deleteEntry = (id) => {
     setEntries((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
+  const updateUserStats = (field, value) => {
+    if (!user) return;
+    const updatedUser = { ...user, [field]: value };
+    setUser(updatedUser);
+    saveUser(updatedUser);
   };
 
   // Progress View
@@ -847,27 +854,73 @@ export default function ProgressiveOverloadTracker() {
             </div>
           </div>
 
-          {/* Physical Stats */}
+          {/* Physical Stats - Editable */}
           <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
             <h3 className="text-lg font-semibold mb-4 text-white">Physical Stats</h3>
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
-                <div className="text-2xl font-bold text-[#FFD700]">
-                  {user.sex === 'male' ? '♂' : '♀'}
+              {/* Sex Toggle */}
+              <div className="bg-[#1a1a2e] rounded-md p-3">
+                <label className="block text-xs text-gray-400 text-center mb-2">Sex</label>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => updateUserStats('sex', 'male')}
+                    className={`flex-1 py-2 rounded text-xl font-bold transition-colors ${
+                      user.sex === 'male'
+                        ? 'bg-[#FFD700] text-[#1a1a2e]'
+                        : 'bg-[#0f3460] text-gray-400 hover:bg-[#16213e]'
+                    }`}
+                  >
+                    ♂
+                  </button>
+                  <button
+                    onClick={() => updateUserStats('sex', 'female')}
+                    className={`flex-1 py-2 rounded text-xl font-bold transition-colors ${
+                      user.sex === 'female'
+                        ? 'bg-[#FFD700] text-[#1a1a2e]'
+                        : 'bg-[#0f3460] text-gray-400 hover:bg-[#16213e]'
+                    }`}
+                  >
+                    ♀
+                  </button>
                 </div>
-                <div className="text-sm text-gray-400 capitalize">{user.sex}</div>
               </div>
-              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
-                <div className="text-2xl font-bold text-white">{user.age}</div>
-                <div className="text-sm text-gray-400">Age</div>
+              {/* Age Input */}
+              <div className="bg-[#1a1a2e] rounded-md p-3">
+                <label className="block text-xs text-gray-400 text-center mb-2">Age</label>
+                <input
+                  type="number"
+                  value={user.age}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val) && val >= 13 && val <= 100) {
+                      updateUserStats('age', val);
+                    }
+                  }}
+                  min="13"
+                  max="100"
+                  className="w-full bg-[#0f3460] border-none rounded px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                />
               </div>
-              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
-                <div className="text-2xl font-bold text-white">{user.bodyweight}</div>
-                <div className="text-sm text-gray-400">kg</div>
+              {/* Bodyweight Input */}
+              <div className="bg-[#1a1a2e] rounded-md p-3">
+                <label className="block text-xs text-gray-400 text-center mb-2">Weight (kg)</label>
+                <input
+                  type="number"
+                  value={user.bodyweight}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val) && val >= 30 && val <= 200) {
+                      updateUserStats('bodyweight', val);
+                    }
+                  }}
+                  min="30"
+                  max="200"
+                  className="w-full bg-[#0f3460] border-none rounded px-2 py-2 text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                />
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-4 text-center">
-              Used for calculating strength level standards
+              Adjust these to calculate your personalized strength levels
             </p>
           </div>
 
