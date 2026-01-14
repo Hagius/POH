@@ -6,10 +6,17 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
+  ReferenceArea,
+  ReferenceLine,
 } from 'recharts';
 import { getUser, getEntries, saveEntries, resetDemo } from './lib/userStore';
+import {
+  getStrengthThresholds,
+  getStrengthLevel,
+  getLevelInfo,
+  LEVEL_COLORS,
+} from './lib/strengthStandards';
 
 const COMMON_EXERCISES = [
   'Squat',
@@ -17,17 +24,6 @@ const COMMON_EXERCISES = [
   'Bench Press',
   'Overhead Press',
   'Barbell Row',
-];
-
-const COLORS = [
-  '#8884d8',
-  '#82ca9d',
-  '#ffc658',
-  '#ff7300',
-  '#00C49F',
-  '#FFBB28',
-  '#FF8042',
-  '#a4de6c',
 ];
 
 // Epley formula: 1RM = weight × (1 + reps/30)
@@ -68,11 +64,31 @@ const UserIcon = ({ active }) => (
   </svg>
 );
 
+// Level Badge Component
+const LevelBadge = ({ level, size = 'md' }) => {
+  const info = getLevelInfo(level);
+  const sizeClasses = {
+    sm: 'px-1.5 py-0.5 text-xs',
+    md: 'px-2 py-1 text-xs',
+    lg: 'px-3 py-1.5 text-sm',
+  };
+
+  return (
+    <span
+      className={`${sizeClasses[size]} font-bold rounded`}
+      style={{ backgroundColor: info.fill, color: '#1a1a2e' }}
+    >
+      {info.label}
+    </span>
+  );
+};
+
 export default function ProgressiveOverloadTracker() {
   const [entries, setEntries] = useState([]);
   const [activeTab, setActiveTab] = useState('add');
   const [flashingEntryId, setFlashingEntryId] = useState(null);
   const [user, setUser] = useState(null);
+  const [selectedExercise, setSelectedExercise] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     customName: '',
@@ -97,6 +113,15 @@ export default function ProgressiveOverloadTracker() {
     }
   }, [entries]);
 
+  // Set default selected exercise when entries load
+  const exerciseNames = useMemo(() => [...new Set(entries.map((e) => e.name))], [entries]);
+
+  useEffect(() => {
+    if (exerciseNames.length > 0 && !selectedExercise) {
+      setSelectedExercise(exerciseNames[0]);
+    }
+  }, [exerciseNames, selectedExercise]);
+
   // Calculate PRs per exercise
   const personalRecords = useMemo(() => {
     const prs = {};
@@ -108,6 +133,12 @@ export default function ProgressiveOverloadTracker() {
     });
     return prs;
   }, [entries]);
+
+  // Get strength thresholds for selected exercise
+  const strengthThresholds = useMemo(() => {
+    if (!user || !selectedExercise) return null;
+    return getStrengthThresholds(selectedExercise, user.sex, user.bodyweight, user.age);
+  }, [user, selectedExercise]);
 
   // Group entries by exercise name
   const groupedEntries = useMemo(() => {
@@ -124,23 +155,35 @@ export default function ProgressiveOverloadTracker() {
     return groups;
   }, [entries]);
 
-  // Prepare chart data
+  // Prepare chart data for selected exercise only
   const chartData = useMemo(() => {
+    if (!selectedExercise) return [];
+
+    const exerciseEntries = entries.filter((e) => e.name === selectedExercise);
     const dateMap = {};
-    entries.forEach((entry) => {
+
+    exerciseEntries.forEach((entry) => {
       const dateKey = entry.date;
-      if (!dateMap[dateKey]) {
-        dateMap[dateKey] = { date: dateKey };
-      }
       const oneRM = calculate1RM(entry.weight, entry.reps);
-      if (!dateMap[dateKey][entry.name] || oneRM > dateMap[dateKey][entry.name]) {
-        dateMap[dateKey][entry.name] = Math.round(oneRM * 10) / 10;
+      if (!dateMap[dateKey] || oneRM > dateMap[dateKey].oneRM) {
+        dateMap[dateKey] = { date: dateKey, oneRM: Math.round(oneRM * 10) / 10 };
       }
     });
-    return Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [entries]);
 
-  const exerciseNames = useMemo(() => [...new Set(entries.map((e) => e.name))], [entries]);
+    return Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [entries, selectedExercise]);
+
+  // Calculate Y-axis domain for chart
+  const yAxisDomain = useMemo(() => {
+    if (!strengthThresholds || chartData.length === 0) return [0, 100];
+
+    const maxDataValue = Math.max(...chartData.map((d) => d.oneRM));
+    const maxThreshold = strengthThresholds.professional * 1.1;
+    const max = Math.max(maxDataValue, maxThreshold);
+    const min = 0;
+
+    return [min, Math.ceil(max / 10) * 10];
+  }, [strengthThresholds, chartData]);
 
   const validateForm = () => {
     const newErrors = {};
@@ -233,123 +276,274 @@ export default function ProgressiveOverloadTracker() {
   };
 
   // Progress View
-  const ProgressView = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-white">Progress</h2>
+  const ProgressView = () => {
+    const selectedEntries = groupedEntries[selectedExercise] || [];
+    const currentPR = personalRecords[selectedExercise];
+    const currentLevel = currentPR && strengthThresholds
+      ? getStrengthLevel(currentPR.oneRM, strengthThresholds)
+      : null;
 
-      {entries.length === 0 ? (
-        <div className="bg-[#16213e] rounded-lg p-8 border border-[#0f3460] text-center">
-          <div className="text-5xl mb-4">📈</div>
-          <h3 className="text-xl font-semibold text-white mb-2">No Data Yet</h3>
-          <p className="text-gray-400">
-            Add your first workout to see your progress charts.
-          </p>
-          <button
-            onClick={() => setActiveTab('add')}
-            className="mt-4 px-6 py-2 bg-[#FFD700] text-[#1a1a2e] font-semibold rounded-md hover:bg-[#e6c200] transition-colors"
-          >
-            Add Workout
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
-            <h3 className="text-lg font-semibold mb-4 text-white">1RM Progression</h3>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#0f3460" />
-                  <XAxis dataKey="date" tickFormatter={formatDate} stroke="#9ca3af" fontSize={12} />
-                  <YAxis stroke="#9ca3af" fontSize={12} tickFormatter={(value) => `${value}kg`} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#16213e',
-                      border: '1px solid #0f3460',
-                      borderRadius: '8px',
-                      color: '#fff',
-                    }}
-                    labelFormatter={formatDate}
-                    formatter={(value) => [`${value} kg`, '1RM']}
-                  />
-                  <Legend />
-                  {exerciseNames.map((name, index) => (
-                    <Line
-                      key={name}
-                      type="monotone"
-                      dataKey={name}
-                      stroke={COLORS[index % COLORS.length]}
-                      strokeWidth={2}
-                      dot={{ fill: COLORS[index % COLORS.length], r: 4 }}
-                      activeDot={{ r: 6 }}
-                      connectNulls
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-white">Progress</h2>
+
+        {entries.length === 0 ? (
+          <div className="bg-[#16213e] rounded-lg p-8 border border-[#0f3460] text-center">
+            <div className="text-5xl mb-4">📈</div>
+            <h3 className="text-xl font-semibold text-white mb-2">No Data Yet</h3>
+            <p className="text-gray-400">
+              Add your first workout to see your progress charts.
+            </p>
+            <button
+              onClick={() => setActiveTab('add')}
+              className="mt-4 px-6 py-2 bg-[#FFD700] text-[#1a1a2e] font-semibold rounded-md hover:bg-[#e6c200] transition-colors"
+            >
+              Add Workout
+            </button>
           </div>
+        ) : (
+          <>
+            {/* Exercise Selector */}
+            <div className="bg-[#16213e] rounded-lg p-4 border border-[#0f3460]">
+              <label className="block text-sm font-medium text-gray-400 mb-2">
+                Select Exercise
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {exerciseNames.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => setSelectedExercise(name)}
+                    className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                      selectedExercise === name
+                        ? 'bg-[#FFD700] text-[#1a1a2e]'
+                        : 'bg-[#1a1a2e] text-gray-300 hover:bg-[#0f3460]'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          {/* Exercise History */}
-          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
-            <h3 className="text-lg font-semibold mb-4 text-white">Workout History</h3>
-            <div className="space-y-6">
-              {Object.entries(groupedEntries).map(([exerciseName, exerciseEntries]) => (
-                <div key={exerciseName}>
-                  <h4 className="font-bold text-white text-md mb-3 border-b border-[#0f3460] pb-2">
-                    {exerciseName}
-                  </h4>
-                  <div className="space-y-2">
-                    {exerciseEntries.map((entry) => {
-                      const oneRM = calculate1RM(entry.weight, entry.reps);
-                      const isPR = personalRecords[entry.name]?.entryId === entry.id;
-
-                      return (
-                        <div
-                          key={entry.id}
-                          className={`flex items-center justify-between rounded-md px-4 py-3 ${
-                            isPR ? 'bg-[#1a1a2e] border-2 border-[#FFD700]' : 'bg-[#1a1a2e] border border-[#0f3460]'
-                          }`}
-                        >
-                          <div className="flex-1">
-                            <div className="text-sm text-gray-400">{formatDate(entry.date)}</div>
-                            <div className="font-medium text-white">
-                              {entry.weight}kg × {entry.reps} reps × {entry.sets} sets
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <div className="text-xs text-gray-400">Est. 1RM</div>
-                              <div className={`font-bold text-lg ${isPR ? 'text-[#FFD700]' : 'text-white'}`}>
-                                {Math.round(oneRM * 10) / 10}kg
-                              </div>
-                            </div>
-                            {isPR && (
-                              <div className="px-2 py-1 rounded text-xs font-bold bg-[#FFD700] text-[#1a1a2e]">
-                                PR
-                              </div>
-                            )}
-                            <button
-                              onClick={() => deleteEntry(entry.id)}
-                              className="p-1 rounded hover:bg-red-500/20 transition-colors text-gray-500 hover:text-red-400"
-                              title="Delete entry"
-                            >
-                              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+            {/* Current Level Display */}
+            {currentPR && strengthThresholds && (
+              <div className="bg-[#16213e] rounded-lg p-4 border border-[#0f3460]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-400">Current Level</div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-2xl font-bold text-white">
+                        {Math.round(currentPR.oneRM * 10) / 10} kg
+                      </span>
+                      <LevelBadge level={currentLevel} size="lg" />
+                    </div>
+                  </div>
+                  <div className="text-right text-sm text-gray-400">
+                    <div>{user?.sex === 'male' ? '♂' : '♀'} {user?.bodyweight} kg</div>
+                    <div>Age {user?.age}</div>
                   </div>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Chart with Level Areas */}
+            <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-4 text-white">
+                {selectedExercise} - 1RM Progression
+              </h3>
+
+              {/* Level Legend */}
+              <div className="flex flex-wrap gap-3 mb-4">
+                {Object.entries(LEVEL_COLORS).map(([level, info]) => (
+                  <div key={level} className="flex items-center gap-1.5 text-xs">
+                    <div
+                      className="w-3 h-3 rounded"
+                      style={{ backgroundColor: info.fill }}
+                    />
+                    <span className="text-gray-400">
+                      {info.label}
+                      {strengthThresholds && (
+                        <span className="text-gray-500 ml-1">
+                          ({level === 'beginner' ? '0' : strengthThresholds[level === 'intermediate' ? 'beginner' : level === 'advanced' ? 'intermediate' : 'advanced']}-{strengthThresholds[level]}kg)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                    {/* Level Reference Areas */}
+                    {strengthThresholds && (
+                      <>
+                        <ReferenceArea
+                          y1={0}
+                          y2={strengthThresholds.beginner}
+                          fill={LEVEL_COLORS.beginner.fill}
+                          fillOpacity={0.15}
+                        />
+                        <ReferenceArea
+                          y1={strengthThresholds.beginner}
+                          y2={strengthThresholds.intermediate}
+                          fill={LEVEL_COLORS.intermediate.fill}
+                          fillOpacity={0.15}
+                        />
+                        <ReferenceArea
+                          y1={strengthThresholds.intermediate}
+                          y2={strengthThresholds.advanced}
+                          fill={LEVEL_COLORS.advanced.fill}
+                          fillOpacity={0.15}
+                        />
+                        <ReferenceArea
+                          y1={strengthThresholds.advanced}
+                          y2={yAxisDomain[1]}
+                          fill={LEVEL_COLORS.professional.fill}
+                          fillOpacity={0.15}
+                        />
+                        {/* Level threshold lines */}
+                        <ReferenceLine
+                          y={strengthThresholds.beginner}
+                          stroke={LEVEL_COLORS.beginner.stroke}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.5}
+                        />
+                        <ReferenceLine
+                          y={strengthThresholds.intermediate}
+                          stroke={LEVEL_COLORS.intermediate.stroke}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.5}
+                        />
+                        <ReferenceLine
+                          y={strengthThresholds.advanced}
+                          stroke={LEVEL_COLORS.advanced.stroke}
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.5}
+                        />
+                      </>
+                    )}
+                    <CartesianGrid strokeDasharray="3 3" stroke="#0f3460" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={formatDate}
+                      stroke="#9ca3af"
+                      fontSize={12}
+                    />
+                    <YAxis
+                      stroke="#9ca3af"
+                      fontSize={12}
+                      tickFormatter={(value) => `${value}kg`}
+                      domain={yAxisDomain}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#16213e',
+                        border: '1px solid #0f3460',
+                        borderRadius: '8px',
+                        color: '#fff',
+                      }}
+                      labelFormatter={formatDate}
+                      formatter={(value) => {
+                        const level = strengthThresholds
+                          ? getStrengthLevel(value, strengthThresholds)
+                          : null;
+                        const levelInfo = level ? getLevelInfo(level) : null;
+                        return [
+                          <span key="value">
+                            {value} kg
+                            {levelInfo && (
+                              <span
+                                style={{
+                                  marginLeft: '8px',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: levelInfo.fill,
+                                  color: '#1a1a2e',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                }}
+                              >
+                                {levelInfo.label}
+                              </span>
+                            )}
+                          </span>,
+                          '1RM',
+                        ];
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="oneRM"
+                      stroke="#FFD700"
+                      strokeWidth={3}
+                      dot={{ fill: '#FFD700', r: 5, strokeWidth: 2, stroke: '#1a1a2e' }}
+                      activeDot={{ r: 8, stroke: '#FFD700', strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+
+            {/* Exercise History for selected exercise */}
+            <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-4 text-white">
+                {selectedExercise} History
+              </h3>
+              <div className="space-y-2">
+                {selectedEntries.map((entry) => {
+                  const oneRM = calculate1RM(entry.weight, entry.reps);
+                  const isPR = personalRecords[entry.name]?.entryId === entry.id;
+                  const level = strengthThresholds
+                    ? getStrengthLevel(oneRM, strengthThresholds)
+                    : null;
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`flex items-center justify-between rounded-md px-4 py-3 ${
+                        isPR ? 'bg-[#1a1a2e] border-2 border-[#FFD700]' : 'bg-[#1a1a2e] border border-[#0f3460]'
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="text-sm text-gray-400">{formatDate(entry.date)}</div>
+                        <div className="font-medium text-white">
+                          {entry.weight}kg × {entry.reps} reps × {entry.sets} sets
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400">Est. 1RM</div>
+                          <div className={`font-bold text-lg ${isPR ? 'text-[#FFD700]' : 'text-white'}`}>
+                            {Math.round(oneRM * 10) / 10}kg
+                          </div>
+                        </div>
+                        {level && <LevelBadge level={level} size="sm" />}
+                        {isPR && (
+                          <div className="px-2 py-1 rounded text-xs font-bold bg-[#FFD700] text-[#1a1a2e]">
+                            PR
+                          </div>
+                        )}
+                        <button
+                          onClick={() => deleteEntry(entry.id)}
+                          className="p-1 rounded hover:bg-red-500/20 transition-colors text-gray-500 hover:text-red-400"
+                          title="Delete entry"
+                        >
+                          <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   // Add Workout View
   const AddWorkoutView = () => (
@@ -497,7 +691,7 @@ export default function ProgressiveOverloadTracker() {
         </div>
       ) : (
         <>
-          {/* PR Summary */}
+          {/* PR Summary with Levels */}
           <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
             <h3 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
               <span>🏆</span> Personal Records
@@ -505,6 +699,11 @@ export default function ProgressiveOverloadTracker() {
             <div className="space-y-3">
               {Object.entries(personalRecords).map(([exercise, data]) => {
                 const isFlashing = flashingEntryId === data.entryId;
+                const thresholds = user
+                  ? getStrengthThresholds(exercise, user.sex, user.bodyweight, user.age)
+                  : null;
+                const level = thresholds ? getStrengthLevel(data.oneRM, thresholds) : null;
+
                 return (
                   <div
                     key={exercise}
@@ -522,6 +721,11 @@ export default function ProgressiveOverloadTracker() {
                         <div className={`text-sm ${isFlashing ? 'text-[#1a1a2e]/70' : 'text-gray-400'}`}>
                           Set on {formatDate(data.date)}
                         </div>
+                        {level && !isFlashing && (
+                          <div className="mt-2">
+                            <LevelBadge level={level} size="md" />
+                          </div>
+                        )}
                       </div>
                       <div className="text-right">
                         <div className={`text-2xl font-bold ${isFlashing ? 'text-[#1a1a2e]' : 'text-[#FFD700]'}`}>
@@ -541,6 +745,29 @@ export default function ProgressiveOverloadTracker() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Level Legend */}
+          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Strength Levels</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(LEVEL_COLORS).map(([level, info]) => (
+                <div
+                  key={level}
+                  className="flex items-center gap-3 p-3 rounded-md bg-[#1a1a2e]"
+                >
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: info.fill }}
+                  />
+                  <span className="text-white font-medium">{info.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-4">
+              Levels based on {user?.sex === 'male' ? 'male' : 'female'} standards,
+              {' '}{user?.bodyweight}kg bodyweight, age {user?.age}
+            </p>
           </div>
 
           {/* Stats Overview */}
@@ -566,14 +793,6 @@ export default function ProgressiveOverloadTracker() {
                 <div className="text-xs text-gray-400">Best 1RM (kg)</div>
               </div>
             </div>
-          </div>
-
-          {/* Motivational Message */}
-          <div className="bg-gradient-to-r from-[#16213e] to-[#0f3460] rounded-lg p-6 border border-[#0f3460] text-center">
-            <p className="text-lg text-white font-medium">
-              "The only bad workout is the one that didn't happen."
-            </p>
-            <p className="text-sm text-gray-400 mt-2">Keep pushing your limits!</p>
           </div>
         </>
       )}
@@ -626,6 +845,30 @@ export default function ProgressiveOverloadTracker() {
                 {user.bio}
               </p>
             </div>
+          </div>
+
+          {/* Physical Stats */}
+          <div className="bg-[#16213e] rounded-lg p-6 border border-[#0f3460]">
+            <h3 className="text-lg font-semibold mb-4 text-white">Physical Stats</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
+                <div className="text-2xl font-bold text-[#FFD700]">
+                  {user.sex === 'male' ? '♂' : '♀'}
+                </div>
+                <div className="text-sm text-gray-400 capitalize">{user.sex}</div>
+              </div>
+              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
+                <div className="text-2xl font-bold text-white">{user.age}</div>
+                <div className="text-sm text-gray-400">Age</div>
+              </div>
+              <div className="bg-[#1a1a2e] rounded-md p-4 text-center">
+                <div className="text-2xl font-bold text-white">{user.bodyweight}</div>
+                <div className="text-sm text-gray-400">kg</div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-4 text-center">
+              Used for calculating strength level standards
+            </p>
           </div>
 
           {/* Account Info */}

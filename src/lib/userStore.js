@@ -13,11 +13,18 @@ const EXERCISES = [
 
 /**
  * Generates a new fake user profile using faker.js
- * @returns {Object} User object with id, name, email, avatar, jobTitle, and bio
+ * @returns {Object} User object with id, name, email, avatar, jobTitle, bio, and physical stats
  */
 function generateUser() {
-  const firstName = faker.person.firstName();
+  const sex = faker.helpers.arrayElement(['male', 'female']);
+  const firstName = faker.person.firstName(sex);
   const lastName = faker.person.lastName();
+
+  // Generate realistic physical stats
+  const age = faker.number.int({ min: 18, max: 55 });
+  const bodyweight = sex === 'male'
+    ? faker.number.int({ min: 65, max: 100 })
+    : faker.number.int({ min: 50, max: 80 });
 
   return {
     id: faker.string.uuid(),
@@ -27,6 +34,10 @@ function generateUser() {
     jobTitle: faker.person.jobTitle(),
     bio: faker.lorem.paragraph(2),
     createdAt: new Date().toISOString(),
+    // Physical stats for strength level calculation
+    sex,
+    age,
+    bodyweight,
   };
 }
 
