@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { getUser, resetDemo } from './lib/userStore';
+import { getUser, getEntries, saveEntries, resetDemo } from './lib/userStore';
 
 const COMMON_EXERCISES = [
   'Squat',
@@ -84,10 +84,18 @@ export default function ProgressiveOverloadTracker() {
   const [errors, setErrors] = useState({});
   const [useCustomName, setUseCustomName] = useState(false);
 
-  // Load user on mount
+  // Load user and entries on mount
   useEffect(() => {
     setUser(getUser());
+    setEntries(getEntries());
   }, []);
+
+  // Save entries to localStorage when they change
+  useEffect(() => {
+    if (entries.length > 0) {
+      saveEntries(entries);
+    }
+  }, [entries]);
 
   // Calculate PRs per exercise
   const personalRecords = useMemo(() => {
