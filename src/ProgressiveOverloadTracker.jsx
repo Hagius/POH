@@ -950,76 +950,101 @@ export default function ProgressiveOverloadTracker() {
             {/* Sets */}
             <div className="p-4 space-y-2">
               {/* Header Row */}
-              <div className="grid grid-cols-12 gap-2 px-2 text-xs text-gray-500 font-medium">
+              <div className="grid grid-cols-10 gap-2 px-2 text-xs text-gray-500 font-medium">
                 <div className="col-span-1">Set</div>
                 <div className="col-span-4">Weight (kg)</div>
-                <div className="col-span-3">Target</div>
-                <div className="col-span-3">Reps</div>
+                <div className="col-span-4">Reps</div>
                 <div className="col-span-1"></div>
               </div>
 
-              {exercise.sets.map((set, setIndex) => (
-                <div
-                  key={set.id}
-                  className="grid grid-cols-12 gap-2 items-center bg-[#1a1a2e] rounded-md p-2"
-                >
-                  {/* Set Number */}
-                  <div className="col-span-1 text-center">
-                    <span className="text-gray-400 font-medium">{setIndex + 1}</span>
-                  </div>
+              {exercise.sets.map((set, setIndex) => {
+                const weight = parseFloat(set.weight);
+                const reps = parseInt(set.reps, 10);
+                const hasCustomWeight = !isNaN(weight) && weight > 0 && set.target1RM &&
+                  Math.abs(weight - (exercise.recommendation?.nextWorkout?.weight || 0)) > 0.1;
+                const hasCustomReps = !isNaN(reps) && reps > 0 && set.target1RM;
 
-                  {/* Weight Input */}
-                  <div className="col-span-4">
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={set.weight}
-                      onChange={(e) => updateSet(exercise.id, set.id, 'weight', e.target.value)}
-                      placeholder={exercise.recommendation?.nextWorkout?.weight?.toString() || '0'}
-                      className="w-full bg-[#0f3460] border border-[#0f3460] rounded px-2 py-2 text-white text-center focus:outline-none focus:ring-2 focus:ring-[#FFD700] focus:border-transparent"
-                    />
-                  </div>
+                // Calculate suggested values based on custom inputs
+                const suggestedReps = hasCustomWeight ? calculateRepsFor1RM(weight, set.target1RM) : null;
+                const suggestedWeight = hasCustomReps && !set.weight ? calculateWeightFor1RM(reps, set.target1RM) : null;
 
-                  {/* Target Reps Display */}
-                  <div className="col-span-3 text-center">
-                    <span className="text-[#FFD700] font-medium">
-                      {set.targetReps ? `→ ${set.targetReps}` : '-'}
-                    </span>
-                  </div>
+                return (
+                  <div key={set.id} className="space-y-1">
+                    <div className="grid grid-cols-10 gap-2 items-center bg-[#1a1a2e] rounded-md p-2">
+                      {/* Set Number */}
+                      <div className="col-span-1 text-center">
+                        <span className="text-gray-400 font-medium">{setIndex + 1}</span>
+                      </div>
 
-                  {/* Actual Reps Input */}
-                  <div className="col-span-3">
-                    <input
-                      type="number"
-                      value={set.reps}
-                      onChange={(e) => updateSet(exercise.id, set.id, 'reps', e.target.value)}
-                      placeholder={set.targetReps?.toString() || '0'}
-                      className={`w-full bg-[#0f3460] border rounded px-2 py-2 text-center focus:outline-none focus:ring-2 focus:ring-[#FFD700] ${
-                        set.reps && set.targetReps
-                          ? parseInt(set.reps, 10) >= set.targetReps
-                            ? 'border-green-500/50 text-green-400'
-                            : 'border-orange-500/50 text-orange-400'
-                          : 'border-[#0f3460] text-white'
-                      }`}
-                    />
-                  </div>
+                      {/* Weight Input */}
+                      <div className="col-span-4">
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={set.weight}
+                          onChange={(e) => updateSet(exercise.id, set.id, 'weight', e.target.value)}
+                          placeholder={exercise.recommendation?.nextWorkout?.weight?.toString() || '0'}
+                          className="w-full bg-[#0f3460] border border-[#0f3460] rounded px-2 py-2 text-white text-center focus:outline-none focus:ring-2 focus:ring-[#FFD700] focus:border-transparent"
+                        />
+                      </div>
 
-                  {/* Delete Set */}
-                  <div className="col-span-1 text-center">
-                    {exercise.sets.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeSetFromExercise(exercise.id, set.id)}
-                        className="p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                        </svg>
-                      </button>
+                      {/* Reps Input */}
+                      <div className="col-span-4">
+                        <input
+                          type="number"
+                          value={set.reps}
+                          onChange={(e) => updateSet(exercise.id, set.id, 'reps', e.target.value)}
+                          placeholder={set.targetReps?.toString() || '0'}
+                          className={`w-full bg-[#0f3460] border rounded px-2 py-2 text-center focus:outline-none focus:ring-2 focus:ring-[#FFD700] ${
+                            set.reps && set.targetReps
+                              ? parseInt(set.reps, 10) >= set.targetReps
+                                ? 'border-green-500/50 text-green-400'
+                                : 'border-orange-500/50 text-orange-400'
+                              : 'border-[#0f3460] text-white'
+                          }`}
+                        />
+                      </div>
+
+                      {/* Delete Set */}
+                      <div className="col-span-1 text-center">
+                        {exercise.sets.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeSetFromExercise(exercise.id, set.id)}
+                            className="p-1 rounded hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Recommendation hints */}
+                    {(suggestedReps || suggestedWeight) && (
+                      <div className="grid grid-cols-10 gap-2 px-2">
+                        <div className="col-span-1"></div>
+                        <div className="col-span-4 text-center">
+                          {suggestedWeight && (
+                            <span className="text-xs text-[#FFD700]">
+                              try {suggestedWeight}kg
+                            </span>
+                          )}
+                        </div>
+                        <div className="col-span-4 text-center">
+                          {suggestedReps && (
+                            <span className="text-xs text-[#FFD700]">
+                              aim for {suggestedReps} reps
+                            </span>
+                          )}
+                        </div>
+                        <div className="col-span-1"></div>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Add Set Button */}
               <button
