@@ -17,6 +17,10 @@ import {
   getLevelInfo,
   LEVEL_COLORS,
 } from './lib/strengthStandards';
+import {
+  getNextWorkoutRecommendation,
+  getExerciseConfig,
+} from './lib/progression';
 
 const COMMON_EXERCISES = [
   'Squat',
@@ -172,6 +176,29 @@ export default function ProgressiveOverloadTracker() {
 
     return Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [entries, selectedExercise]);
+
+  // Calculate workout recommendation for selected exercise in form
+  const workoutRecommendation = useMemo(() => {
+    const exerciseName = useCustomName ? formData.customName.trim() : formData.name;
+    if (!exerciseName) return null;
+
+    // Get history for this exercise (most recent first)
+    const exerciseHistory = entries
+      .filter((e) => e.name === exerciseName)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (exerciseHistory.length === 0) return null;
+
+    // Use the most recent workout as current performance
+    const lastWorkout = exerciseHistory[0];
+    const recommendation = getNextWorkoutRecommendation(
+      { weight: lastWorkout.weight, reps: lastWorkout.reps, sets: lastWorkout.sets },
+      exerciseName,
+      exerciseHistory.slice(1) // Exclude the most recent one (used as "current")
+    );
+
+    return recommendation;
+  }, [entries, formData.name, formData.customName, useCustomName]);
 
   // Calculate Y-axis domain for chart
   const yAxisDomain = useMemo(() => {
@@ -597,6 +624,93 @@ export default function ProgressiveOverloadTracker() {
             )}
             {errors.name && <p className="text-red-400 text-sm mt-1">{errors.name}</p>}
           </div>
+
+          {/* Workout Recommendation */}
+          {workoutRecommendation && (
+            <div
+              className={`rounded-lg p-4 border ${
+                workoutRecommendation.status === 'deload'
+                  ? 'bg-orange-500/10 border-orange-500/30'
+                  : workoutRecommendation.status === 'double_jump'
+                    ? 'bg-green-500/10 border-green-500/30'
+                    : workoutRecommendation.status === 'progress'
+                      ? 'bg-[#FFD700]/10 border-[#FFD700]/30'
+                      : 'bg-[#0f3460]/50 border-[#0f3460]'
+              }`}
+              data-testid="workout-recommendation"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-300">
+                  {workoutRecommendation.status === 'deload' && '⚠️ '}
+                  {workoutRecommendation.status === 'double_jump' && '🚀 '}
+                  {workoutRecommendation.status === 'progress' && '📈 '}
+                  {workoutRecommendation.status === 'maintain' && '💪 '}
+                  {workoutRecommendation.status === 'struggle' && '🎯 '}
+                  Recommended
+                </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    workoutRecommendation.status === 'deload'
+                      ? 'bg-orange-500/20 text-orange-400'
+                      : workoutRecommendation.status === 'double_jump'
+                        ? 'bg-green-500/20 text-green-400'
+                        : workoutRecommendation.status === 'progress'
+                          ? 'bg-[#FFD700]/20 text-[#FFD700]'
+                          : 'bg-[#0f3460] text-gray-400'
+                  }`}
+                >
+                  {workoutRecommendation.status === 'deload' && 'Deload'}
+                  {workoutRecommendation.status === 'double_jump' && 'Double Jump!'}
+                  {workoutRecommendation.status === 'progress' && 'Progress'}
+                  {workoutRecommendation.status === 'maintain' && 'Build Reps'}
+                  {workoutRecommendation.status === 'struggle' && 'Keep Pushing'}
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="text-2xl font-bold text-white">
+                    {workoutRecommendation.nextWorkout.weight}
+                    <span className="text-sm font-normal text-gray-400 ml-1">kg</span>
+                  </div>
+                  <div className="text-xs text-gray-400">Weight</div>
+                </div>
+                <div className="text-2xl text-gray-500">×</div>
+                <div className="flex-1">
+                  <div className="text-2xl font-bold text-white">
+                    {workoutRecommendation.nextWorkout.targetReps}
+                    <span className="text-sm font-normal text-gray-400 ml-1">reps</span>
+                  </div>
+                  <div className="text-xs text-gray-400">Target</div>
+                </div>
+                <div className="text-2xl text-gray-500">×</div>
+                <div className="flex-1">
+                  <div className="text-2xl font-bold text-white">
+                    {workoutRecommendation.nextWorkout.sets}
+                    <span className="text-sm font-normal text-gray-400 ml-1">sets</span>
+                  </div>
+                  <div className="text-xs text-gray-400">Sets</div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-3 leading-relaxed">
+                {workoutRecommendation.message}
+              </p>
+              {/* Apply Recommendation Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    weight: workoutRecommendation.nextWorkout.weight.toString(),
+                    reps: workoutRecommendation.nextWorkout.targetReps.toString(),
+                    sets: workoutRecommendation.nextWorkout.sets.toString(),
+                  }));
+                }}
+                className="mt-3 w-full py-2 bg-[#0f3460] hover:bg-[#1a1a2e] text-gray-300 hover:text-white text-sm font-medium rounded transition-colors"
+              >
+                Apply Recommendation
+              </button>
+            </div>
+          )}
 
           {/* Weight, Reps, Sets */}
           <div className="grid grid-cols-3 gap-3">
