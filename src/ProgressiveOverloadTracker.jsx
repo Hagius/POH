@@ -278,6 +278,8 @@ export default function ProgressiveOverloadTracker() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [dataMode, setDataMode] = useState('demo');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editedUser, setEditedUser] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -300,6 +302,30 @@ export default function ProgressiveOverloadTracker() {
     setDataMode(newMode);
     setUser(getCurrentUser());
     setEntries(getCurrentEntries());
+  };
+
+  // Profile editing handlers
+  const startEditingProfile = () => {
+    setEditedUser({ ...user });
+    setEditingProfile(true);
+  };
+
+  const cancelEditingProfile = () => {
+    setEditedUser(null);
+    setEditingProfile(false);
+  };
+
+  const saveProfileChanges = () => {
+    if (editedUser) {
+      saveCurrentUser(editedUser);
+      setUser(editedUser);
+      setEditingProfile(false);
+      setEditedUser(null);
+    }
+  };
+
+  const updateEditedUser = (field, value) => {
+    setEditedUser(prev => ({ ...prev, [field]: value }));
   };
 
   // Computed values
@@ -679,102 +705,215 @@ export default function ProgressiveOverloadTracker() {
     );
   };
 
-  // Profile View (Minimal)
-  const ProfileView = () => (
-    <div className="min-h-screen bg-white">
-      <div className="px-6 pt-12 pb-8">
-        <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Settings</span>
-        <h1 className="text-4xl font-extrabold text-black mt-1">Profile</h1>
-      </div>
+  // Profile View (Editable)
+  const ProfileView = () => {
+    const displayUser = editingProfile ? editedUser : user;
 
-      {user && (
-        <div className="px-6">
-          {/* Avatar & Name */}
-          <div className="flex items-center pb-8 border-b border-gray-100">
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="w-16 h-16 rounded-full object-cover"
-            />
-            <div className="ml-4">
-              <h2 className="text-xl font-bold text-black">{user.name}</h2>
-              <p className="text-gray-400">{user.email}</p>
+    return (
+      <div className="min-h-screen bg-white pb-24">
+        <div className="px-6 pt-12 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Settings</span>
+              <h1 className="text-4xl font-extrabold text-black mt-1">Profile</h1>
             </div>
+            {!editingProfile ? (
+              <button
+                onClick={startEditingProfile}
+                className="px-4 py-2 text-sm font-medium text-black border border-gray-200 rounded-full"
+              >
+                Edit
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelEditingProfile}
+                  className="px-4 py-2 text-sm font-medium text-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveProfileChanges}
+                  className="px-4 py-2 text-sm font-medium text-white bg-black rounded-full"
+                >
+                  Save
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Stats */}
-          <div className="py-8 border-b border-gray-100">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Body Stats</span>
-            <div className="grid grid-cols-3 gap-6 mt-4">
-              <div>
-                <span className="text-3xl font-extrabold text-black">{user.bodyweight}</span>
-                <span className="text-lg text-gray-400 ml-1">kg</span>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Weight</p>
-              </div>
-              <div>
-                <span className="text-3xl font-extrabold text-black">{user.age}</span>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Age</p>
-              </div>
-              <div>
-                <span className="text-3xl font-extrabold text-black">{user.sex === 'male' ? 'M' : 'F'}</span>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Sex</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Workout Stats */}
-          <div className="py-8 border-b border-gray-100">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Activity</span>
-            <div className="grid grid-cols-2 gap-6 mt-4">
-              <div>
-                <span className="text-4xl font-extrabold text-black">{entries.length}</span>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Total Sets</p>
-              </div>
-              <div>
-                <span className="text-4xl font-extrabold text-black">{Object.keys(personalRecords).length}</span>
-                <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">PRs Set</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Data Mode Toggle */}
-          <div className="py-8">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Data Source</span>
-            <button
-              onClick={handleToggleDataMode}
-              className="w-full mt-4 flex items-center justify-between py-4 px-5 bg-gray-50 rounded-2xl"
-            >
-              <div className="text-left">
-                <span className="font-semibold text-black">
-                  {dataMode === 'demo' ? 'Demo Data' : 'Your Data'}
-                </span>
-                <p className="text-sm text-gray-400 mt-0.5">
-                  {dataMode === 'demo' ? 'Using generated sample data' : 'Using your logged workouts'}
-                </p>
-              </div>
-              <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
-                dataMode === 'user' ? 'bg-[#00C805]' : 'bg-gray-300'
-              }`}>
-                <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  dataMode === 'user' ? 'translate-x-5' : 'translate-x-0'
-                }`} />
-              </div>
-            </button>
-          </div>
-
-          {/* Reset Demo (only shown in demo mode) */}
-          {dataMode === 'demo' && (
-            <button
-              onClick={resetDemo}
-              className="w-full py-4 text-[#FF5200] font-medium"
-            >
-              Reset Demo Data
-            </button>
-          )}
         </div>
-      )}
-    </div>
-  );
+
+        {displayUser && (
+          <div className="px-6">
+            {/* Avatar & Name */}
+            <div className="pb-6 border-b border-gray-100">
+              <div className="flex items-center mb-6">
+                <img
+                  src={displayUser.avatar}
+                  alt={displayUser.name}
+                  className="w-16 h-16 rounded-full object-cover"
+                />
+                {!editingProfile && (
+                  <div className="ml-4">
+                    <h2 className="text-xl font-bold text-black">{displayUser.name}</h2>
+                    <p className="text-gray-400">{displayUser.email || 'No email'}</p>
+                  </div>
+                )}
+              </div>
+
+              {editingProfile && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Name</label>
+                    <input
+                      type="text"
+                      value={editedUser?.name || ''}
+                      onChange={(e) => updateEditedUser('name', e.target.value)}
+                      className="w-full mt-2 px-4 py-3 text-lg font-medium text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Email</label>
+                    <input
+                      type="email"
+                      value={editedUser?.email || ''}
+                      onChange={(e) => updateEditedUser('email', e.target.value)}
+                      className="w-full mt-2 px-4 py-3 text-lg font-medium text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+                      placeholder="your@email.com"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Body Stats */}
+            <div className="py-6 border-b border-gray-100">
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Body Stats</span>
+
+              {!editingProfile ? (
+                <div className="grid grid-cols-3 gap-6 mt-4">
+                  <div>
+                    <span className="text-3xl font-extrabold text-black">{displayUser.bodyweight}</span>
+                    <span className="text-lg text-gray-400 ml-1">kg</span>
+                    <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Weight</p>
+                  </div>
+                  <div>
+                    <span className="text-3xl font-extrabold text-black">{displayUser.age}</span>
+                    <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Age</p>
+                  </div>
+                  <div>
+                    <span className="text-3xl font-extrabold text-black">{displayUser.sex === 'male' ? 'M' : 'F'}</span>
+                    <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Sex</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Weight (kg)</label>
+                      <input
+                        type="number"
+                        value={editedUser?.bodyweight || ''}
+                        onChange={(e) => updateEditedUser('bodyweight', parseInt(e.target.value) || 0)}
+                        className="w-full mt-2 px-4 py-3 text-lg font-medium text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+                        placeholder="75"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Age</label>
+                      <input
+                        type="number"
+                        value={editedUser?.age || ''}
+                        onChange={(e) => updateEditedUser('age', parseInt(e.target.value) || 0)}
+                        className="w-full mt-2 px-4 py-3 text-lg font-medium text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+                        placeholder="30"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Sex</label>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => updateEditedUser('sex', 'male')}
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          editedUser?.sex === 'male'
+                            ? 'bg-black text-white'
+                            : 'bg-gray-50 text-gray-500'
+                        }`}
+                      >
+                        Male
+                      </button>
+                      <button
+                        onClick={() => updateEditedUser('sex', 'female')}
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          editedUser?.sex === 'female'
+                            ? 'bg-black text-white'
+                            : 'bg-gray-50 text-gray-500'
+                        }`}
+                      >
+                        Female
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Workout Stats - Read only */}
+            <div className="py-6 border-b border-gray-100">
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Activity</span>
+              <div className="grid grid-cols-2 gap-6 mt-4">
+                <div>
+                  <span className="text-4xl font-extrabold text-black">{entries.length}</span>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">Total Sets</p>
+                </div>
+                <div>
+                  <span className="text-4xl font-extrabold text-black">{Object.keys(personalRecords).length}</span>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">PRs Set</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Data Mode Toggle */}
+            <div className="py-6">
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Data Source</span>
+              <button
+                onClick={handleToggleDataMode}
+                className="w-full mt-4 flex items-center justify-between py-4 px-5 bg-gray-50 rounded-2xl"
+              >
+                <div className="text-left">
+                  <span className="font-semibold text-black">
+                    {dataMode === 'demo' ? 'Demo Data' : 'Your Data'}
+                  </span>
+                  <p className="text-sm text-gray-400 mt-0.5">
+                    {dataMode === 'demo' ? 'Using generated sample data' : 'Using your logged workouts'}
+                  </p>
+                </div>
+                <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
+                  dataMode === 'user' ? 'bg-[#00C805]' : 'bg-gray-300'
+                }`}>
+                  <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    dataMode === 'user' ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </div>
+              </button>
+            </div>
+
+            {/* Reset Demo (only shown in demo mode) */}
+            {dataMode === 'demo' && (
+              <button
+                onClick={resetDemo}
+                className="w-full py-4 text-[#FF5200] font-medium"
+              >
+                Reset Demo Data
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Get current recommendation for log view
   const currentRecommendation = selectedExercise ? getRecommendation(selectedExercise) : null;
