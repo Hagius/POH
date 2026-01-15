@@ -140,24 +140,25 @@ const Numpad = ({ value, onChange, onSubmit, label, suffix = 'kg' }) => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Display Area */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 pt-8">
-        <span className="text-xs uppercase tracking-[0.2em] text-gray-400 mb-4">{label}</span>
+      {/* Display Area - Fixed height */}
+      <div className="h-32 flex flex-col items-center justify-center px-8">
+        <span className="text-xs uppercase tracking-[0.2em] text-gray-400 mb-2">{label}</span>
         <div className="flex items-baseline">
-          <span className="text-7xl font-extrabold tracking-tight text-black">
+          <span className="text-6xl font-extrabold tracking-tight text-black">
             {value || '0'}
           </span>
-          <span className="text-2xl font-medium text-gray-400 ml-2">{suffix}</span>
+          <span className="text-xl font-medium text-gray-400 ml-2">{suffix}</span>
         </div>
       </div>
 
       {/* Numpad Grid */}
-      <div className="grid grid-cols-3 gap-1 p-4 bg-gray-50">
+      <div className="grid grid-cols-3 gap-1 p-3 bg-gray-50 flex-1">
         {keys.map((key) => (
           <button
             key={key}
+            type="button"
             onClick={() => handleKey(key)}
-            className="h-16 rounded-2xl bg-white text-2xl font-semibold text-black active:bg-gray-100 transition-colors flex items-center justify-center"
+            className="h-14 rounded-2xl bg-white text-2xl font-semibold text-black active:bg-gray-100 transition-colors flex items-center justify-center select-none"
           >
             {key === 'backspace' ? (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,14 +169,15 @@ const Numpad = ({ value, onChange, onSubmit, label, suffix = 'kg' }) => {
         ))}
       </div>
 
-      {/* Submit Button */}
-      <div className="p-4 pt-0">
+      {/* Submit Button - Always visible */}
+      <div className="p-4 pb-6 bg-white">
         <button
+          type="button"
           onClick={onSubmit}
           disabled={!value || parseFloat(value) <= 0}
           className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
         >
-          LOG SET
+          {suffix === 'kg' ? 'NEXT' : 'LOG SET'}
         </button>
       </div>
     </div>
@@ -194,7 +196,7 @@ const Sheet = ({ isOpen, onClose, children }) => {
         onClick={onClose}
       />
       {/* Sheet */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl max-h-[90vh] overflow-hidden animate-slide-up">
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl overflow-hidden animate-slide-up" style={{ height: '70vh' }}>
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-2">
           <div className="w-10 h-1 bg-gray-300 rounded-full" />
@@ -641,55 +643,18 @@ export default function ProgressiveOverloadTracker() {
     </div>
   );
 
-  // Log Sheet
-  const LogSheet = () => {
-    const recommendation = selectedExercise ? getRecommendation(selectedExercise) : null;
+  // Get current recommendation for log sheet
+  const currentRecommendation = selectedExercise ? getRecommendation(selectedExercise) : null;
 
-    const handleWeightSubmit = () => {
-      setLogStep('reps');
-    };
-
-    const handleRepsSubmit = () => {
-      logSet();
-    };
-
-    return (
-      <Sheet isOpen={showLogSheet} onClose={() => {
-        setShowLogSheet(false);
-        setCurrentSet({ weight: '', reps: '' });
-        setLogStep('weight');
-      }}>
-        <div className="h-[80vh]">
-          {/* Exercise Name */}
-          <div className="px-6 pt-2 pb-4 border-b border-gray-100">
-            <h2 className="text-xl font-bold text-black text-center">{selectedExercise}</h2>
-            {recommendation && (
-              <p className="text-sm text-gray-400 text-center mt-1">
-                Target: {recommendation.nextWorkout.weight}kg × {recommendation.nextWorkout.targetReps} reps
-              </p>
-            )}
-          </div>
-
-          {logStep === 'weight' ? (
-            <Numpad
-              value={currentSet.weight}
-              onChange={(v) => setCurrentSet((prev) => ({ ...prev, weight: v }))}
-              onSubmit={handleWeightSubmit}
-              label="Weight"
-              suffix="kg"
-            />
-          ) : (
-            <Numpad
-              value={currentSet.reps}
-              onChange={(v) => setCurrentSet((prev) => ({ ...prev, reps: v }))}
-              onSubmit={handleRepsSubmit}
-              label="Reps"
-              suffix="reps"
-            />
-          )}
-        </div>
-      </Sheet>
-    );
+  // Handlers for log sheet (defined at component level to prevent re-renders)
+  const handleWeightChange = (v) => setCurrentSet((prev) => ({ ...prev, weight: v }));
+  const handleRepsChange = (v) => setCurrentSet((prev) => ({ ...prev, reps: v }));
+  const handleWeightSubmit = () => setLogStep('reps');
+  const handleRepsSubmit = () => logSet();
+  const handleCloseSheet = () => {
+    setShowLogSheet(false);
+    setCurrentSet({ weight: '', reps: '' });
+    setLogStep('weight');
   };
 
   return (
@@ -699,8 +664,40 @@ export default function ProgressiveOverloadTracker() {
       {activeTab === 'detail' && <ExerciseDetailView />}
       {activeTab === 'profile' && <ProfileView />}
 
-      {/* Log Sheet */}
-      <LogSheet />
+      {/* Log Sheet - Inlined to prevent re-renders */}
+      <Sheet isOpen={showLogSheet} onClose={handleCloseSheet}>
+        <div className="h-full flex flex-col">
+          {/* Exercise Name */}
+          <div className="px-6 pt-2 pb-4 border-b border-gray-100 flex-shrink-0">
+            <h2 className="text-xl font-bold text-black text-center">{selectedExercise}</h2>
+            {currentRecommendation && (
+              <p className="text-sm text-gray-400 text-center mt-1">
+                Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
+              </p>
+            )}
+          </div>
+
+          <div className="flex-1">
+            {logStep === 'weight' ? (
+              <Numpad
+                value={currentSet.weight}
+                onChange={handleWeightChange}
+                onSubmit={handleWeightSubmit}
+                label="Weight"
+                suffix="kg"
+              />
+            ) : (
+              <Numpad
+                value={currentSet.reps}
+                onChange={handleRepsChange}
+                onSubmit={handleRepsSubmit}
+                label="Reps"
+                suffix="reps"
+              />
+            )}
+          </div>
+        </div>
+      </Sheet>
 
       {/* Bottom Navigation - Minimal */}
       {activeTab !== 'detail' && (
