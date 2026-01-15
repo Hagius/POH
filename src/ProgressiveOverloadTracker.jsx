@@ -4,7 +4,18 @@ import {
   Line,
   ResponsiveContainer,
 } from 'recharts';
-import { getUser, getEntries, saveEntries, saveUser, resetDemo } from './lib/userStore';
+import {
+  getUser,
+  getEntries,
+  saveEntries,
+  saveUser,
+  resetDemo,
+  getDataMode,
+  toggleDataMode,
+  getCurrentUser,
+  getCurrentEntries,
+  saveCurrentEntries,
+} from './lib/userStore';
 import {
   getStrengthThresholds,
   getStrengthLevel,
@@ -266,19 +277,30 @@ export default function ProgressiveOverloadTracker() {
   const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [dataMode, setDataMode] = useState('demo');
 
   // Load data on mount
   useEffect(() => {
-    setUser(getUser());
-    setEntries(getEntries());
+    const mode = getDataMode();
+    setDataMode(mode);
+    setUser(getCurrentUser());
+    setEntries(getCurrentEntries());
   }, []);
 
-  // Save entries
+  // Save entries when they change
   useEffect(() => {
-    if (entries.length > 0) {
-      saveEntries(entries);
+    if (entries.length > 0 || dataMode === 'user') {
+      saveCurrentEntries(entries);
     }
-  }, [entries]);
+  }, [entries, dataMode]);
+
+  // Handle data mode toggle
+  const handleToggleDataMode = () => {
+    const newMode = toggleDataMode();
+    setDataMode(newMode);
+    setUser(getCurrentUser());
+    setEntries(getCurrentEntries());
+  };
 
   // Computed values
   const exerciseNames = useMemo(() => [...new Set(entries.map((e) => e.name))], [entries]);
@@ -701,7 +723,7 @@ export default function ProgressiveOverloadTracker() {
           </div>
 
           {/* Workout Stats */}
-          <div className="py-8">
+          <div className="py-8 border-b border-gray-100">
             <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Activity</span>
             <div className="grid grid-cols-2 gap-6 mt-4">
               <div>
@@ -715,13 +737,40 @@ export default function ProgressiveOverloadTracker() {
             </div>
           </div>
 
-          {/* Reset */}
-          <button
-            onClick={resetDemo}
-            className="w-full mt-8 py-4 text-[#FF5200] font-medium"
-          >
-            Reset Demo Data
-          </button>
+          {/* Data Mode Toggle */}
+          <div className="py-8">
+            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Data Source</span>
+            <button
+              onClick={handleToggleDataMode}
+              className="w-full mt-4 flex items-center justify-between py-4 px-5 bg-gray-50 rounded-2xl"
+            >
+              <div className="text-left">
+                <span className="font-semibold text-black">
+                  {dataMode === 'demo' ? 'Demo Data' : 'Your Data'}
+                </span>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  {dataMode === 'demo' ? 'Using generated sample data' : 'Using your logged workouts'}
+                </p>
+              </div>
+              <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
+                dataMode === 'user' ? 'bg-[#00C805]' : 'bg-gray-300'
+              }`}>
+                <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  dataMode === 'user' ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+            </button>
+          </div>
+
+          {/* Reset Demo (only shown in demo mode) */}
+          {dataMode === 'demo' && (
+            <button
+              onClick={resetDemo}
+              className="w-full py-4 text-[#FF5200] font-medium"
+            >
+              Reset Demo Data
+            </button>
+          )}
         </div>
       )}
     </div>

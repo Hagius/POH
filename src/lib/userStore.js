@@ -2,6 +2,9 @@ import { faker } from '@faker-js/faker';
 
 const USER_STORAGE_KEY = 'poh_demo_user';
 const ENTRIES_STORAGE_KEY = 'poh_demo_entries';
+const USER_DATA_KEY = 'poh_user_data';
+const USER_ENTRIES_KEY = 'poh_user_entries';
+const DATA_MODE_KEY = 'poh_data_mode'; // 'demo' or 'user'
 
 const EXERCISES = [
   { name: 'Squat', baseWeight: 60, maxWeight: 140 },
@@ -201,4 +204,127 @@ export function resetDemo() {
   window.location.reload();
 }
 
-export { USER_STORAGE_KEY, ENTRIES_STORAGE_KEY };
+/**
+ * Gets the current data mode ('demo' or 'user')
+ * @returns {string} The current data mode
+ */
+export function getDataMode() {
+  try {
+    const mode = localStorage.getItem(DATA_MODE_KEY);
+    return mode === 'user' ? 'user' : 'demo';
+  } catch (error) {
+    return 'demo';
+  }
+}
+
+/**
+ * Sets the data mode and returns the new mode
+ * @param {string} mode - 'demo' or 'user'
+ * @returns {string} The new data mode
+ */
+export function setDataMode(mode) {
+  try {
+    const newMode = mode === 'user' ? 'user' : 'demo';
+    localStorage.setItem(DATA_MODE_KEY, newMode);
+    return newMode;
+  } catch (error) {
+    console.warn('Failed to set data mode:', error);
+    return 'demo';
+  }
+}
+
+/**
+ * Toggles between demo and user data mode
+ * @returns {string} The new data mode
+ */
+export function toggleDataMode() {
+  const currentMode = getDataMode();
+  const newMode = currentMode === 'demo' ? 'user' : 'demo';
+  return setDataMode(newMode);
+}
+
+/**
+ * Gets user data based on current mode
+ * @returns {Object} The user object for current mode
+ */
+export function getCurrentUser() {
+  const mode = getDataMode();
+  if (mode === 'user') {
+    try {
+      const stored = localStorage.getItem(USER_DATA_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.warn('Failed to read user data:', error);
+    }
+    // Return default user data structure
+    return {
+      id: 'user-' + Date.now(),
+      name: 'You',
+      email: '',
+      avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=You',
+      sex: 'male',
+      age: 30,
+      bodyweight: 75,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  return getUser();
+}
+
+/**
+ * Saves user data for user mode
+ * @param {Object} user - The user object to save
+ */
+export function saveCurrentUser(user) {
+  const mode = getDataMode();
+  if (mode === 'user') {
+    try {
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
+    } catch (error) {
+      console.warn('Failed to save user data:', error);
+    }
+  } else {
+    saveUser(user);
+  }
+}
+
+/**
+ * Gets entries based on current mode
+ * @returns {Array} Array of workout entries for current mode
+ */
+export function getCurrentEntries() {
+  const mode = getDataMode();
+  if (mode === 'user') {
+    try {
+      const stored = localStorage.getItem(USER_ENTRIES_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.warn('Failed to read user entries:', error);
+    }
+    return [];
+  }
+  return getEntries();
+}
+
+/**
+ * Saves entries for current mode
+ * @param {Array} entries - Array of workout entries
+ */
+export function saveCurrentEntries(entries) {
+  const mode = getDataMode();
+  if (mode === 'user') {
+    try {
+      localStorage.setItem(USER_ENTRIES_KEY, JSON.stringify(entries));
+    } catch (error) {
+      console.warn('Failed to save user entries:', error);
+    }
+  } else {
+    saveEntries(entries);
+  }
+}
+
+export { USER_STORAGE_KEY, ENTRIES_STORAGE_KEY, USER_DATA_KEY, USER_ENTRIES_KEY, DATA_MODE_KEY };
