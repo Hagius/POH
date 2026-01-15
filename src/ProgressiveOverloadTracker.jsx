@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -122,82 +122,106 @@ const Sparkline = ({ data, color = COLORS.text, height = 40 }) => {
   );
 };
 
-// Custom Numpad Component
-const Numpad = ({ value, onChange, onSubmit, label, suffix = 'kg' }) => {
-  const handleKey = (key) => {
-    if (key === 'backspace') {
-      onChange(value.slice(0, -1));
-    } else if (key === '.') {
-      if (!value.includes('.')) {
-        onChange(value + '.');
-      }
-    } else {
-      onChange(value + key);
+// Scroll Number Picker Component
+const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg' }) => {
+  const containerRef = useRef(null);
+  const isDragging = useRef(false);
+  const startY = useRef(0);
+  const startValue = useRef(0);
+
+  const handleStart = useCallback((clientY) => {
+    isDragging.current = true;
+    startY.current = clientY;
+    startValue.current = value;
+  }, [value]);
+
+  const handleMove = useCallback((clientY) => {
+    if (!isDragging.current) return;
+
+    const diff = startY.current - clientY;
+    const valueChange = Math.round(diff / 10) * step;
+    const newValue = Math.max(min, Math.min(max, startValue.current + valueChange));
+
+    // Round to step
+    const rounded = Math.round(newValue / step) * step;
+    if (rounded !== value) {
+      onChange(rounded);
+    }
+  }, [value, onChange, min, max, step]);
+
+  const handleEnd = useCallback(() => {
+    isDragging.current = false;
+  }, []);
+
+  // Touch events
+  const onTouchStart = (e) => handleStart(e.touches[0].clientY);
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    handleMove(e.touches[0].clientY);
+  };
+  const onTouchEnd = () => handleEnd();
+
+  // Mouse events
+  const onMouseDown = (e) => handleStart(e.clientY);
+  const onMouseMove = (e) => {
+    if (isDragging.current) {
+      e.preventDefault();
+      handleMove(e.clientY);
     }
   };
-
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'backspace'];
+  const onMouseUp = () => handleEnd();
+  const onMouseLeave = () => handleEnd();
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Display Area - Fixed height */}
-      <div className="h-32 flex flex-col items-center justify-center px-8">
-        <span className="text-xs uppercase tracking-[0.2em] text-gray-400 mb-2">{label}</span>
-        <div className="flex items-baseline">
-          <span className="text-6xl font-extrabold tracking-tight text-black">
-            {value || '0'}
-          </span>
-          <span className="text-xl font-medium text-gray-400 ml-2">{suffix}</span>
-        </div>
+    <div
+      ref={containerRef}
+      className="flex-1 flex flex-col items-center justify-center select-none cursor-ns-resize touch-none"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Up indicator */}
+      <div className="text-gray-300 mb-4">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
+        </svg>
       </div>
 
-      {/* Numpad Grid */}
-      <div className="grid grid-cols-3 gap-1 p-3 bg-gray-50 flex-1">
-        {keys.map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => handleKey(key)}
-            className="h-14 rounded-2xl bg-white text-2xl font-semibold text-black active:bg-gray-100 transition-colors flex items-center justify-center select-none"
-          >
-            {key === 'backspace' ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414a2 2 0 011.414-.586H19a2 2 0 012 2v10a2 2 0 01-2 2h-8.172a2 2 0 01-1.414-.586L3 12z" />
-              </svg>
-            ) : key}
-          </button>
-        ))}
+      {/* Value display */}
+      <div className="flex items-baseline">
+        <span className="text-8xl font-extrabold tracking-tight text-black tabular-nums">
+          {typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value}
+        </span>
+        <span className="text-3xl font-medium text-gray-400 ml-3">{suffix}</span>
       </div>
 
-      {/* Submit Button - Always visible */}
-      <div className="p-4 pb-6 bg-white">
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!value || parseFloat(value) <= 0}
-          className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
-        >
-          {suffix === 'kg' ? 'NEXT' : 'LOG SET'}
-        </button>
+      {/* Down indicator */}
+      <div className="text-gray-300 mt-4">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
+        </svg>
       </div>
+
+      <p className="text-sm text-gray-400 mt-6">Swipe up or down to adjust</p>
     </div>
   );
 };
 
-// Sheet Modal Component
+// Sheet Modal Component (for exercise picker only)
 const Sheet = ({ isOpen, onClose, children }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 transition-opacity"
         onClick={onClose}
       />
-      {/* Sheet */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl overflow-hidden animate-slide-up" style={{ height: '70vh' }}>
-        {/* Handle */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl overflow-hidden animate-slide-up" style={{ maxHeight: '70vh' }}>
         <div className="flex justify-center pt-3 pb-2">
           <div className="w-10 h-1 bg-gray-300 rounded-full" />
         </div>
@@ -212,9 +236,9 @@ export default function ProgressiveOverloadTracker() {
   const [activeTab, setActiveTab] = useState('exercises');
   const [user, setUser] = useState(null);
   const [selectedExercise, setSelectedExercise] = useState(null);
-  const [showLogSheet, setShowLogSheet] = useState(false);
+  const [showLogView, setShowLogView] = useState(false);
   const [logStep, setLogStep] = useState('weight'); // 'weight' | 'reps'
-  const [currentSet, setCurrentSet] = useState({ weight: '', reps: '' });
+  const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
   const [showExercisePicker, setShowExercisePicker] = useState(false);
 
   // Load data on mount
@@ -304,22 +328,39 @@ export default function ProgressiveOverloadTracker() {
   const logSet = () => {
     if (!selectedExercise || !currentSet.weight || !currentSet.reps) return;
 
-    const weight = parseFloat(currentSet.weight);
-    const reps = parseInt(currentSet.reps, 10);
-
     const newEntry = {
       id: generateId(),
       name: selectedExercise,
       date: new Date().toISOString().split('T')[0],
-      weight,
-      reps,
+      weight: currentSet.weight,
+      reps: currentSet.reps,
       sets: 1,
     };
 
     setEntries((prev) => [...prev, newEntry]);
-    setShowLogSheet(false);
-    setCurrentSet({ weight: '', reps: '' });
+    setShowLogView(false);
+    setCurrentSet({ weight: 0, reps: 8 });
     setLogStep('weight');
+  };
+
+  // Open log view with initial values from recommendation
+  const openLogView = (exerciseName) => {
+    setSelectedExercise(exerciseName);
+    const recommendation = getRecommendation(exerciseName);
+    if (recommendation) {
+      setCurrentSet({
+        weight: recommendation.nextWorkout.weight,
+        reps: recommendation.nextWorkout.targetReps,
+      });
+    } else {
+      const lastWeight = getLastWeight(exerciseName);
+      setCurrentSet({
+        weight: lastWeight || 20,
+        reps: 8,
+      });
+    }
+    setLogStep('weight');
+    setShowLogView(true);
   };
 
   // Exercise List View (Stock Watchlist Style)
@@ -419,9 +460,8 @@ export default function ProgressiveOverloadTracker() {
                 <button
                   key={exercise}
                   onClick={() => {
-                    setSelectedExercise(exercise);
                     setShowExercisePicker(false);
-                    setShowLogSheet(true);
+                    openLogView(exercise);
                   }}
                   className="w-full flex items-center py-4 px-4 rounded-2xl hover:bg-gray-50 transition-colors"
                 >
@@ -563,7 +603,7 @@ export default function ProgressiveOverloadTracker() {
         {/* Log Button */}
         <div className="fixed bottom-24 left-6 right-6">
           <button
-            onClick={() => setShowLogSheet(true)}
+            onClick={() => openLogView(selectedExercise)}
             className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full"
           >
             Log Set
@@ -643,19 +683,122 @@ export default function ProgressiveOverloadTracker() {
     </div>
   );
 
-  // Get current recommendation for log sheet
+  // Get current recommendation for log view
   const currentRecommendation = selectedExercise ? getRecommendation(selectedExercise) : null;
 
-  // Handlers for log sheet (defined at component level to prevent re-renders)
+  // Handlers for log view
   const handleWeightChange = (v) => setCurrentSet((prev) => ({ ...prev, weight: v }));
   const handleRepsChange = (v) => setCurrentSet((prev) => ({ ...prev, reps: v }));
-  const handleWeightSubmit = () => setLogStep('reps');
-  const handleRepsSubmit = () => logSet();
-  const handleCloseSheet = () => {
-    setShowLogSheet(false);
-    setCurrentSet({ weight: '', reps: '' });
+  const handleCloseLogView = () => {
+    setShowLogView(false);
+    setCurrentSet({ weight: 0, reps: 8 });
     setLogStep('weight');
   };
+
+  // Fullscreen Log View
+  if (showLogView) {
+    return (
+      <div className="fixed inset-0 bg-white z-50 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-12 pb-4">
+          <button
+            onClick={handleCloseLogView}
+            className="text-gray-400 flex items-center"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+          <div className="w-6" /> {/* Spacer for centering */}
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex justify-center gap-2 pb-4">
+          <div className={`w-2 h-2 rounded-full ${logStep === 'weight' ? 'bg-black' : 'bg-gray-300'}`} />
+          <div className={`w-2 h-2 rounded-full ${logStep === 'reps' ? 'bg-black' : 'bg-gray-300'}`} />
+        </div>
+
+        {/* Upper half - Scroll number picker */}
+        <div className="flex-1 flex flex-col">
+          {logStep === 'weight' ? (
+            <ScrollNumberPicker
+              value={currentSet.weight}
+              onChange={handleWeightChange}
+              min={0}
+              max={500}
+              step={2.5}
+              suffix="kg"
+            />
+          ) : (
+            <ScrollNumberPicker
+              value={currentSet.reps}
+              onChange={handleRepsChange}
+              min={1}
+              max={50}
+              step={1}
+              suffix="reps"
+            />
+          )}
+        </div>
+
+        {/* Lower half - Recommendation info */}
+        <div className="px-6 pb-8">
+          {currentRecommendation && (
+            <div className="bg-gray-50 rounded-3xl p-6 mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2 h-2 rounded-full ${
+                  currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
+                  currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                  'bg-gray-400'
+                }`} />
+                <span className="text-xs uppercase tracking-[0.15em] text-gray-500 font-medium">
+                  {currentRecommendation.status === 'progress' && 'Progress'}
+                  {currentRecommendation.status === 'maintain' && 'Build Reps'}
+                  {currentRecommendation.status === 'deload' && 'Deload Week'}
+                  {currentRecommendation.status === 'double_jump' && 'Double Jump'}
+                  {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
+                </span>
+              </div>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                {currentRecommendation.message}
+              </p>
+              {logStep === 'weight' && (
+                <p className="text-black font-medium mt-3">
+                  Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Action button */}
+          <button
+            onClick={() => {
+              if (logStep === 'weight') {
+                setLogStep('reps');
+              } else {
+                logSet();
+              }
+            }}
+            disabled={logStep === 'weight' ? currentSet.weight <= 0 : currentSet.reps <= 0}
+            className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {logStep === 'weight' ? 'NEXT' : 'LOG SET'}
+          </button>
+
+          {/* Back button for reps step */}
+          {logStep === 'reps' && (
+            <button
+              onClick={() => setLogStep('weight')}
+              className="w-full h-12 text-gray-500 text-sm font-medium mt-2"
+            >
+              Back to weight
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white text-black pb-20">
@@ -663,41 +806,6 @@ export default function ProgressiveOverloadTracker() {
       {activeTab === 'exercises' && <ExerciseListView />}
       {activeTab === 'detail' && <ExerciseDetailView />}
       {activeTab === 'profile' && <ProfileView />}
-
-      {/* Log Sheet - Inlined to prevent re-renders */}
-      <Sheet isOpen={showLogSheet} onClose={handleCloseSheet}>
-        <div className="h-full flex flex-col">
-          {/* Exercise Name */}
-          <div className="px-6 pt-2 pb-4 border-b border-gray-100 flex-shrink-0">
-            <h2 className="text-xl font-bold text-black text-center">{selectedExercise}</h2>
-            {currentRecommendation && (
-              <p className="text-sm text-gray-400 text-center mt-1">
-                Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
-              </p>
-            )}
-          </div>
-
-          <div className="flex-1">
-            {logStep === 'weight' ? (
-              <Numpad
-                value={currentSet.weight}
-                onChange={handleWeightChange}
-                onSubmit={handleWeightSubmit}
-                label="Weight"
-                suffix="kg"
-              />
-            ) : (
-              <Numpad
-                value={currentSet.reps}
-                onChange={handleRepsChange}
-                onSubmit={handleRepsSubmit}
-                label="Reps"
-                suffix="reps"
-              />
-            )}
-          </div>
-        </div>
-      </Sheet>
 
       {/* Bottom Navigation - Minimal */}
       {activeTab !== 'detail' && (
