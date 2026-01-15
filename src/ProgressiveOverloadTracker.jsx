@@ -153,6 +153,19 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
     isDragging.current = false;
   }, []);
 
+  // Increment/decrement handlers for arrow clicks
+  const increment = useCallback(() => {
+    const newValue = Math.min(max, value + step);
+    const rounded = Math.round(newValue / step) * step;
+    onChange(rounded);
+  }, [value, onChange, max, step]);
+
+  const decrement = useCallback(() => {
+    const newValue = Math.max(min, value - step);
+    const rounded = Math.round(newValue / step) * step;
+    onChange(rounded);
+  }, [value, onChange, min, step]);
+
   // Touch events
   const onTouchStart = (e) => handleStart(e.touches[0].clientY);
   const onTouchMove = (e) => {
@@ -172,6 +185,12 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
   const onMouseUp = () => handleEnd();
   const onMouseLeave = () => handleEnd();
 
+  // Format value to always show one decimal place
+  const formatValue = (v) => {
+    if (typeof v !== 'number') return v;
+    return v.toFixed(1);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -184,29 +203,35 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseLeave}
     >
-      {/* Up indicator */}
-      <div className="text-gray-300 mb-4">
+      {/* Up arrow - clickable */}
+      <button
+        onClick={increment}
+        className="text-gray-300 mb-4 hover:text-gray-500 transition-colors p-2"
+      >
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
         </svg>
-      </div>
+      </button>
 
       {/* Value display */}
       <div className="flex items-baseline">
         <span className="text-8xl font-extrabold tracking-tight text-black tabular-nums">
-          {typeof value === 'number' ? (Number.isInteger(value) ? value : value.toFixed(1)) : value}
+          {formatValue(value)}
         </span>
         <span className="text-3xl font-medium text-gray-400 ml-3">{suffix}</span>
       </div>
 
-      {/* Down indicator */}
-      <div className="text-gray-300 mt-4">
+      {/* Down arrow - clickable */}
+      <button
+        onClick={decrement}
+        className="text-gray-300 mt-4 hover:text-gray-500 transition-colors p-2"
+      >
         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
         </svg>
-      </div>
+      </button>
 
-      <p className="text-sm text-gray-400 mt-6">Swipe up or down to adjust</p>
+      <p className="text-sm text-gray-400 mt-6">Swipe or tap arrows to adjust</p>
     </div>
   );
 };
@@ -700,23 +725,24 @@ export default function ProgressiveOverloadTracker() {
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-12 pb-4">
+        <div className="flex items-center justify-between px-6 pt-12 pb-2">
           <button
             onClick={handleCloseLogView}
             className="text-gray-400 flex items-center"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+            {currentRecommendation && (
+              <p className="text-sm text-gray-400 mt-1">
+                Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
+              </p>
+            )}
+          </div>
           <div className="w-6" /> {/* Spacer for centering */}
-        </div>
-
-        {/* Step indicator */}
-        <div className="flex justify-center gap-2 pb-4">
-          <div className={`w-2 h-2 rounded-full ${logStep === 'weight' ? 'bg-black' : 'bg-gray-300'}`} />
-          <div className={`w-2 h-2 rounded-full ${logStep === 'reps' ? 'bg-black' : 'bg-gray-300'}`} />
         </div>
 
         {/* Upper half - Scroll number picker */}
@@ -745,11 +771,14 @@ export default function ProgressiveOverloadTracker() {
         {/* Lower half - Recommendation info */}
         <div className="px-6 pb-8">
           {currentRecommendation && (
-            <div className="bg-gray-50 rounded-3xl p-6 mb-6">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="mb-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-3">
                 <span className={`w-2 h-2 rounded-full ${
                   currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
+                  currentRecommendation.status === 'maintain' ? 'bg-gray-400' :
                   currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                  currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
+                  currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
                   'bg-gray-400'
                 }`} />
                 <span className="text-xs uppercase tracking-[0.15em] text-gray-500 font-medium">
@@ -760,14 +789,9 @@ export default function ProgressiveOverloadTracker() {
                   {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
                 </span>
               </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
+              <p className="text-gray-500 text-sm leading-relaxed">
                 {currentRecommendation.message}
               </p>
-              {logStep === 'weight' && (
-                <p className="text-black font-medium mt-3">
-                  Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
-                </p>
-              )}
             </div>
           )}
 
