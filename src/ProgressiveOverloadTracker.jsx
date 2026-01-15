@@ -265,6 +265,7 @@ export default function ProgressiveOverloadTracker() {
   const [logStep, setLogStep] = useState('weight'); // 'weight' | 'reps'
   const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -531,26 +532,27 @@ export default function ProgressiveOverloadTracker() {
           <h1 className="text-3xl font-extrabold text-black">{selectedExercise}</h1>
         </div>
 
-        {/* Hero Number - Current PR */}
-        {pr && (
-          <div className="px-6 py-8">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Personal Record</span>
-            <div className="flex items-baseline mt-2">
-              <span className="text-6xl font-extrabold text-black tracking-tight">
-                {Math.round(pr.oneRM * 10) / 10}
-              </span>
-              <span className="text-2xl font-medium text-gray-400 ml-2">kg</span>
-              <span className="ml-3 px-3 py-1 bg-[#00C805] text-white text-xs font-bold rounded-full uppercase">
-                1RM
-              </span>
+        {/* 1. Progress Chart */}
+        {chartData.length > 1 && (
+          <div className="px-6 py-6">
+            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
+            <div className="h-40 mt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#000000"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <p className="text-sm text-gray-400 mt-2">
-              {pr.weight}kg × {pr.reps} reps on {formatDateShort(pr.date)}
-            </p>
           </div>
         )}
 
-        {/* Recommendation */}
+        {/* 2. Recommendation */}
         {recommendation && (
           <div className="mx-6 p-5 bg-gray-50 rounded-3xl mb-6">
             <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Next Session</span>
@@ -569,60 +571,77 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Minimal Chart */}
-        {chartData.length > 1 && (
-          <div className="px-6 py-8">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
-            <div className="h-40 mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#000000"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+        {/* 3. Personal Record */}
+        {pr && (
+          <div className="px-6 py-6">
+            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Personal Record</span>
+            <div className="flex items-baseline mt-2">
+              <span className="text-5xl font-extrabold text-black tracking-tight">
+                {Math.round(pr.oneRM * 10) / 10}
+              </span>
+              <span className="text-xl font-medium text-gray-400 ml-2">kg</span>
+              <span className="ml-3 px-3 py-1 bg-[#00C805] text-white text-xs font-bold rounded-full uppercase">
+                1RM
+              </span>
             </div>
+            <p className="text-sm text-gray-400 mt-2">
+              {pr.weight}kg × {pr.reps} reps on {formatDateShort(pr.date)}
+            </p>
           </div>
         )}
 
-        {/* History */}
+        {/* 4. History - Collapsible */}
         <div className="px-6 pb-32">
-          <span className="text-xs uppercase tracking-[0.2em] text-gray-400">History</span>
-          <div className="mt-4 space-y-3">
-            {exerciseEntries.map((entry) => {
-              const oneRM = calculate1RM(entry.weight, entry.reps);
-              const isPR = pr?.entryId === entry.id;
+          <button
+            onClick={() => setHistoryExpanded(!historyExpanded)}
+            className="w-full flex items-center justify-between py-3"
+          >
+            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">
+              History ({exerciseEntries.length})
+            </span>
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform ${historyExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-              return (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between py-3"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-black">
-                        {entry.weight}kg × {entry.reps}
-                      </span>
-                      {isPR && (
-                        <span className="px-2 py-0.5 bg-[#00C805] text-white text-[10px] font-bold rounded-full">
-                          PR
+          {historyExpanded && (
+            <div className="mt-2 space-y-3">
+              {exerciseEntries.map((entry) => {
+                const oneRM = calculate1RM(entry.weight, entry.reps);
+                const isPR = pr?.entryId === entry.id;
+
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between py-3"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-black">
+                          {entry.weight}kg × {entry.reps}
                         </span>
-                      )}
+                        {isPR && (
+                          <span className="px-2 py-0.5 bg-[#00C805] text-white text-[10px] font-bold rounded-full">
+                            PR
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-400">{formatDate(entry.date)}</span>
                     </div>
-                    <span className="text-sm text-gray-400">{formatDate(entry.date)}</span>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-black">{Math.round(oneRM * 10) / 10}</span>
+                      <span className="text-sm text-gray-400 ml-1">1RM</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-lg font-bold text-black">{Math.round(oneRM * 10) / 10}</span>
-                    <span className="text-sm text-gray-400 ml-1">1RM</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Log Button */}
