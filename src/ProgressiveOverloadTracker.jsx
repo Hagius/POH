@@ -702,6 +702,19 @@ export default function ProgressiveOverloadTracker() {
     ) : null;
     const strengthLevel = pr && strengthThresholds ? getStrengthLevel(pr.oneRM, strengthThresholds) : null;
 
+    // Calculate weight needed for next level
+    const getNextLevelInfo = () => {
+      if (!pr || !strengthThresholds || !strengthLevel) return null;
+      const levels = ['beginner', 'intermediate', 'advanced', 'professional'];
+      const currentIndex = levels.indexOf(strengthLevel);
+      if (currentIndex === levels.length - 1) return { isMax: true };
+      const nextLevel = levels[currentIndex + 1];
+      const nextThreshold = strengthThresholds[nextLevel];
+      const weightNeeded = Math.round((nextThreshold - pr.oneRM) * 10) / 10;
+      return { nextLevel, weightNeeded, nextThreshold };
+    };
+    const nextLevelInfo = getNextLevelInfo();
+
     return (
       <div className="min-h-screen bg-white">
         {/* Header */}
@@ -715,7 +728,19 @@ export default function ProgressiveOverloadTracker() {
             </svg>
             <span className="text-sm">Back</span>
           </button>
-          <h1 className="text-3xl font-extrabold text-black">{selectedExercise}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-extrabold text-black">{selectedExercise}</h1>
+            {strengthLevel && (
+              <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
+                strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
+                strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
+                strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
+                'bg-green-500 text-white'
+              }`}>
+                {strengthLevel}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 1. Progress Chart */}
@@ -757,7 +782,7 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* 3. Personal Record with Strength Level */}
+        {/* 3. Personal Record */}
         {pr && (
           <div className="px-6 py-6">
             <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Personal Record</span>
@@ -773,39 +798,6 @@ export default function ProgressiveOverloadTracker() {
             <p className="text-sm text-gray-400 mt-2">
               {pr.weight}kg × {pr.reps} reps on {formatDateShort(pr.date)}
             </p>
-
-            {/* Strength Level Indicator */}
-            {strengthLevel && strengthThresholds && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-[0.15em] text-gray-400">Strength Level</span>
-                  <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
-                    strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
-                    strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
-                    strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
-                    'bg-green-500 text-white'
-                  }`}>
-                    {strengthLevel}
-                  </span>
-                </div>
-                <div className="mt-3 flex gap-1">
-                  {['beginner', 'intermediate', 'advanced', 'professional'].map((level) => (
-                    <div
-                      key={level}
-                      className={`flex-1 h-2 rounded-full ${
-                        level === 'beginner' ? (strengthLevel === 'beginner' || strengthLevel === 'intermediate' || strengthLevel === 'advanced' || strengthLevel === 'professional' ? 'bg-green-500' : 'bg-gray-200') :
-                        level === 'intermediate' ? (strengthLevel === 'intermediate' || strengthLevel === 'advanced' || strengthLevel === 'professional' ? 'bg-blue-500' : 'bg-gray-200') :
-                        level === 'advanced' ? (strengthLevel === 'advanced' || strengthLevel === 'professional' ? 'bg-purple-500' : 'bg-gray-200') :
-                        (strengthLevel === 'professional' ? 'bg-amber-400' : 'bg-gray-200')
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 text-xs text-gray-400">
-                  Based on {user?.bodyweight}kg bodyweight, {user?.sex === 'female' ? 'female' : 'male'}, age {user?.age}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -879,8 +871,24 @@ export default function ProgressiveOverloadTracker() {
           )}
         </div>
 
-        {/* Log Button */}
+        {/* Next Level Info & Log Button */}
         <div className="fixed bottom-24 left-6 right-6">
+          {nextLevelInfo && !nextLevelInfo.isMax && (
+            <p className="text-center text-sm text-gray-400 mb-3">
+              <span className="font-semibold text-black">+{nextLevelInfo.weightNeeded}kg</span> to reach{' '}
+              <span className={`font-semibold ${
+                nextLevelInfo.nextLevel === 'professional' ? 'text-amber-500' :
+                nextLevelInfo.nextLevel === 'advanced' ? 'text-purple-500' :
+                nextLevelInfo.nextLevel === 'intermediate' ? 'text-blue-500' :
+                'text-green-500'
+              }`}>{nextLevelInfo.nextLevel}</span>
+            </p>
+          )}
+          {nextLevelInfo?.isMax && (
+            <p className="text-center text-sm text-amber-500 mb-3 font-medium">
+              You've reached the highest level!
+            </p>
+          )}
           <button
             onClick={() => openLogView(selectedExercise)}
             className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full"
