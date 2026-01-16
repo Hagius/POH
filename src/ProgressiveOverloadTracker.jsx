@@ -5,6 +5,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   YAxis,
+  Tooltip,
 } from 'recharts';
 import {
   getUser,
@@ -370,6 +371,7 @@ export default function ProgressiveOverloadTracker() {
   const [editingEntry, setEditingEntry] = useState(null);
   const [editedEntryData, setEditedEntryData] = useState(null);
   const [selectedChartPoint, setSelectedChartPoint] = useState(null);
+  const [isScrubbingChart, setIsScrubbingChart] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -778,12 +780,35 @@ export default function ProgressiveOverloadTracker() {
       isMax: levelThresholds.isMax,
     } : null;
 
-    // Handle chart click/touch
-    const handleChartClick = (data) => {
+    // Handle chart scrubbing
+    const handleChartMouseMove = (data) => {
       if (data && data.activePayload && data.activePayload.length > 0) {
         const point = data.activePayload[0].payload;
         setSelectedChartPoint(point);
+        setIsScrubbingChart(true);
       }
+    };
+
+    const handleChartMouseLeave = () => {
+      setIsScrubbingChart(false);
+      // Keep the last selected point visible
+    };
+
+    // Custom cursor component for vertical focus line
+    const CustomCursor = ({ points, width, height, payload }) => {
+      if (!points || points.length === 0 || !isScrubbingChart) return null;
+      const { x } = points[0];
+      return (
+        <line
+          x1={x}
+          y1={0}
+          x2={x}
+          y2={height}
+          stroke="#000000"
+          strokeWidth={1.5}
+          strokeDasharray="none"
+        />
+      );
     };
 
     return (
@@ -836,13 +861,29 @@ export default function ProgressiveOverloadTracker() {
         {/* 1. Progress Chart */}
         {chartData.length > 1 && (
           <div className="px-6 py-6">
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
-            <div className="h-48 mt-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
+              {/* Show selected point info inline while scrubbing */}
+              {selectedChartPoint && (
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-black">
+                    {Math.round(selectedChartPoint.value * 10) / 10}kg
+                  </span>
+                  <span className="text-sm text-gray-400">{formatDateShort(selectedChartPoint.date)}</span>
+                </div>
+              )}
+            </div>
+            <div
+              className="h-48 touch-none"
+              onTouchStart={() => setIsScrubbingChart(true)}
+              onTouchEnd={() => setIsScrubbingChart(false)}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={chartData}
                   margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                  onClick={handleChartClick}
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={handleChartMouseLeave}
                 >
                   <YAxis domain={['auto', 'auto']} hide />
                   {/* Current level threshold line */}
@@ -863,17 +904,24 @@ export default function ProgressiveOverloadTracker() {
                       strokeWidth={1.5}
                     />
                   )}
+                  <Tooltip
+                    content={() => null}
+                    cursor={<CustomCursor />}
+                    isAnimationActive={false}
+                  />
                   <Line
                     type="monotone"
                     dataKey="value"
                     stroke="#000000"
                     strokeWidth={2}
-                    dot={{ r: 4, fill: '#000000', strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: '#000000', stroke: '#fff', strokeWidth: 2 }}
+                    dot={{ r: 3, fill: '#000000', strokeWidth: 0 }}
+                    activeDot={{ r: 8, fill: '#000000', stroke: '#fff', strokeWidth: 3 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
+            {/* Scrub hint */}
+            <p className="text-center text-xs text-gray-300 mt-2">Drag to explore</p>
             {/* Level threshold legend */}
             {levelThresholds && (
               <div className="flex items-center justify-center gap-6 mt-3">
@@ -889,23 +937,6 @@ export default function ProgressiveOverloadTracker() {
                     <span className="text-xs text-gray-500 capitalize">{levelThresholds.nextLevel}</span>
                   </div>
                 )}
-              </div>
-            )}
-            {/* Selected data point details */}
-            {selectedChartPoint && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs uppercase tracking-[0.15em] text-gray-400">Selected</span>
-                    <p className="text-lg font-bold text-black mt-1">
-                      {Math.round(selectedChartPoint.value * 10) / 10}kg
-                      <span className="text-sm font-normal text-gray-400 ml-1">1RM</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm text-gray-500">{formatDateShort(selectedChartPoint.date)}</span>
-                  </div>
-                </div>
               </div>
             )}
           </div>
