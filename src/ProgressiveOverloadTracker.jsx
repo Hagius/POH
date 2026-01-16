@@ -5,7 +5,6 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   YAxis,
-  Tooltip,
 } from 'recharts';
 import {
   getUser,
@@ -372,6 +371,8 @@ export default function ProgressiveOverloadTracker() {
   const [editedEntryData, setEditedEntryData] = useState(null);
   const [selectedChartPoint, setSelectedChartPoint] = useState(null);
   const [isScrubbingChart, setIsScrubbingChart] = useState(false);
+  const [chartAnimated, setChartAnimated] = useState(false);
+  const chartContainerRef = useRef(null);
 
   // Load data on mount
   useEffect(() => {
@@ -780,35 +781,60 @@ export default function ProgressiveOverloadTracker() {
       isMax: levelThresholds.isMax,
     } : null;
 
-    // Handle chart scrubbing
-    const handleChartMouseMove = (data) => {
-      if (data && data.activePayload && data.activePayload.length > 0) {
-        const point = data.activePayload[0].payload;
-        setSelectedChartPoint(point);
-        setIsScrubbingChart(true);
-      }
+    // Handle chart scrubbing - find data point from x position
+    const getDataPointFromX = (clientX) => {
+      if (!chartContainerRef.current || chartData.length === 0) return null;
+      const rect = chartContainerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const chartWidth = rect.width - 20; // Account for margins
+      const xOffset = 10; // Left margin
+      const normalizedX = Math.max(0, Math.min(1, (x - xOffset) / chartWidth));
+      const index = Math.round(normalizedX * (chartData.length - 1));
+      return chartData[Math.max(0, Math.min(chartData.length - 1, index))];
+    };
+
+    const handleChartTouchStart = (e) => {
+      e.preventDefault();
+      setIsScrubbingChart(true);
+      const touch = e.touches[0];
+      const point = getDataPointFromX(touch.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartTouchMove = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const point = getDataPointFromX(touch.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartTouchEnd = () => {
+      setIsScrubbingChart(false);
+    };
+
+    const handleChartMouseDown = (e) => {
+      setIsScrubbingChart(true);
+      const point = getDataPointFromX(e.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartMouseMove = (e) => {
+      if (!isScrubbingChart) return;
+      const point = getDataPointFromX(e.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartMouseUp = () => {
+      setIsScrubbingChart(false);
     };
 
     const handleChartMouseLeave = () => {
       setIsScrubbingChart(false);
-      // Keep the last selected point visible
     };
 
-    // Custom cursor component for vertical focus line
-    const CustomCursor = ({ points, width, height, payload }) => {
-      if (!points || points.length === 0 || !isScrubbingChart) return null;
-      const { x } = points[0];
-      return (
-        <line
-          x1={x}
-          y1={0}
-          x2={x}
-          y2={height}
-          stroke="#000000"
-          strokeWidth={1.5}
-          strokeDasharray="none"
-        />
-      );
+    // Mark animation as complete after first render
+    const handleAnimationEnd = () => {
+      setChartAnimated(true);
     };
 
     return (
@@ -818,6 +844,7 @@ export default function ProgressiveOverloadTracker() {
           <button
             onClick={() => {
               setSelectedChartPoint(null);
+              setChartAnimated(false);
               setActiveTab('exercises');
             }}
             className="flex items-center text-gray-400 mb-4"
@@ -874,16 +901,20 @@ export default function ProgressiveOverloadTracker() {
               )}
             </div>
             <div
-              className="h-48 touch-none"
-              onTouchStart={() => setIsScrubbingChart(true)}
-              onTouchEnd={() => setIsScrubbingChart(false)}
+              ref={chartContainerRef}
+              className="h-48 touch-none select-none cursor-crosshair relative"
+              onTouchStart={handleChartTouchStart}
+              onTouchMove={handleChartTouchMove}
+              onTouchEnd={handleChartTouchEnd}
+              onMouseDown={handleChartMouseDown}
+              onMouseMove={handleChartMouseMove}
+              onMouseUp={handleChartMouseUp}
+              onMouseLeave={handleChartMouseLeave}
             >
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={chartData}
                   margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-                  onMouseMove={handleChartMouseMove}
-                  onMouseLeave={handleChartMouseLeave}
                 >
                   <YAxis domain={['auto', 'auto']} hide />
                   {/* Current level threshold line */}
@@ -904,22 +935,41 @@ export default function ProgressiveOverloadTracker() {
                       strokeWidth={1.5}
                     />
                   )}
-                  <Tooltip
-                    content={() => null}
-                    cursor={<CustomCursor />}
-                    isAnimationActive={false}
-                  />
                   <Line
                     type="monotone"
                     dataKey="value"
                     stroke="#000000"
                     strokeWidth={2}
                     dot={false}
-                    activeDot={isScrubbingChart ? { r: 8, fill: '#000000', stroke: '#fff', strokeWidth: 3 } : false}
-                    isAnimationActive={false}
+                    activeDot={false}
+                    isAnimationActive={!chartAnimated}
+                    animationDuration={800}
+                    onAnimationEnd={handleAnimationEnd}
                   />
                 </LineChart>
               </ResponsiveContainer>
+              {/* Custom overlay for scrub indicator */}
+              {isScrubbingChart && selectedChartPoint && (
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: `${10 + ((chartData.findIndex(d => d.date === selectedChartPoint.date) / (chartData.length - 1)) * (100 - 5.5))}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    backgroundColor: '#000',
+                  }}
+                >
+                  <div
+                    className="absolute w-4 h-4 bg-black rounded-full border-2 border-white"
+                    style={{
+                      left: -7,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
+                </div>
+              )}
             </div>
             {/* Scrub hint */}
             <p className="text-center text-xs text-gray-300 mt-2">Drag to explore</p>
