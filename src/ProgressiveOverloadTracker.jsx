@@ -863,8 +863,8 @@ export default function ProgressiveOverloadTracker() {
           <div className="px-6 py-6">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
-              {/* Show selected point info inline while scrubbing */}
-              {selectedChartPoint && (
+              {/* Show selected point info inline only while scrubbing */}
+              {isScrubbingChart && selectedChartPoint && (
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-bold text-black">
                     {Math.round(selectedChartPoint.value * 10) / 10}kg
@@ -914,8 +914,9 @@ export default function ProgressiveOverloadTracker() {
                     dataKey="value"
                     stroke="#000000"
                     strokeWidth={2}
-                    dot={{ r: 3, fill: '#000000', strokeWidth: 0 }}
-                    activeDot={{ r: 8, fill: '#000000', stroke: '#fff', strokeWidth: 3 }}
+                    dot={false}
+                    activeDot={isScrubbingChart ? { r: 8, fill: '#000000', stroke: '#fff', strokeWidth: 3 } : false}
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
