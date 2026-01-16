@@ -357,8 +357,9 @@ export default function ProgressiveOverloadTracker() {
   const [user, setUser] = useState(null);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [showLogView, setShowLogView] = useState(false);
-  const [logStep, setLogStep] = useState('weight'); // 'weight' | 'reps'
+  const [logStep, setLogStep] = useState('main'); // 'main' | 'weight' | 'reps'
   const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
+  const [setsLoggedCount, setSetsLoggedCount] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [dataMode, setDataMode] = useState('demo');
@@ -559,9 +560,8 @@ export default function ProgressiveOverloadTracker() {
     };
 
     setEntries((prev) => [...prev, newEntry]);
-    setShowLogView(false);
-    setCurrentSet({ weight: 0, reps: 8 });
-    setLogStep('weight');
+    setSetsLoggedCount((prev) => prev + 1);
+    setLogStep('main'); // Return to main view to allow adding another set
   };
 
   // Open log view with initial values from recommendation
@@ -580,7 +580,8 @@ export default function ProgressiveOverloadTracker() {
         reps: 8,
       });
     }
-    setLogStep('weight');
+    setLogStep('main');
+    setSetsLoggedCount(0);
     setShowLogView(true);
   };
 
@@ -915,15 +916,15 @@ export default function ProgressiveOverloadTracker() {
           )}
         </div>
 
-        {/* Log Button */}
-        <div className="fixed bottom-24 left-6 right-6">
-          <button
-            onClick={() => openLogView(selectedExercise)}
-            className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full"
-          >
-            Log Set
-          </button>
-        </div>
+        {/* FAB to Log */}
+        <button
+          onClick={() => openLogView(selectedExercise)}
+          className="fixed bottom-24 right-6 w-14 h-14 bg-black rounded-full flex items-center justify-center shadow-lg"
+        >
+          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
     );
   };
@@ -940,7 +941,8 @@ export default function ProgressiveOverloadTracker() {
   const handleCloseLogView = () => {
     setShowLogView(false);
     setCurrentSet({ weight: 0, reps: 8 });
-    setLogStep('weight');
+    setLogStep('main');
+    setSetsLoggedCount(0);
   };
 
   // Fullscreen Edit Entry View
@@ -1031,6 +1033,58 @@ export default function ProgressiveOverloadTracker() {
 
   // Fullscreen Log View
   if (showLogView) {
+    // Weight or Reps picker sub-view
+    if (logStep === 'weight' || logStep === 'reps') {
+      return (
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-12 pb-2">
+            <button
+              onClick={() => setLogStep('main')}
+              className="text-gray-400 flex items-center"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <h1 className="text-xl font-bold text-black">
+              {logStep === 'weight' ? 'Set Weight' : 'Set Reps'}
+            </h1>
+            <button
+              onClick={() => setLogStep('main')}
+              className="text-[#00C805] font-semibold"
+            >
+              Done
+            </button>
+          </div>
+
+          {/* Scroll number picker */}
+          <div className="flex-1 flex flex-col">
+            {logStep === 'weight' ? (
+              <ScrollNumberPicker
+                value={currentSet.weight}
+                onChange={handleWeightChange}
+                min={0}
+                max={500}
+                step={2.5}
+                suffix="kg"
+              />
+            ) : (
+              <ScrollNumberPicker
+                value={currentSet.reps}
+                onChange={handleRepsChange}
+                min={1}
+                max={50}
+                step={1}
+                suffix="reps"
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Main quick-log view
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
@@ -1040,48 +1094,63 @@ export default function ProgressiveOverloadTracker() {
             className="text-gray-400 flex items-center"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <div className="text-center">
-            <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
-            {currentRecommendation && (
-              <p className="text-sm text-gray-400 mt-1">
-                Target: {currentRecommendation.nextWorkout.weight}kg × {currentRecommendation.nextWorkout.targetReps} reps
-              </p>
-            )}
+          <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+          <div className="w-6" />
+        </div>
+
+        {/* Sets logged indicator */}
+        {setsLoggedCount > 0 && (
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-center gap-2 py-3 bg-[#00C805]/10 rounded-2xl">
+              <svg className="w-5 h-5 text-[#00C805]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-[#00C805] font-semibold">
+                {setsLoggedCount} {setsLoggedCount === 1 ? 'set' : 'sets'} logged
+              </span>
+            </div>
           </div>
-          <div className="w-6" /> {/* Spacer for centering */}
+        )}
+
+        {/* Big tappable weight × reps display */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="flex items-center justify-center gap-4">
+            {/* Weight - tappable */}
+            <button
+              onClick={() => setLogStep('weight')}
+              className="flex flex-col items-center p-4 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
+              <span className="text-6xl font-extrabold text-black tabular-nums">
+                {currentSet.weight.toFixed(1)}
+              </span>
+              <span className="text-lg text-gray-400 mt-1">kg</span>
+            </button>
+
+            <span className="text-4xl text-gray-300 font-light">×</span>
+
+            {/* Reps - tappable */}
+            <button
+              onClick={() => setLogStep('reps')}
+              className="flex flex-col items-center p-4 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            >
+              <span className="text-6xl font-extrabold text-black tabular-nums">
+                {currentSet.reps}
+              </span>
+              <span className="text-lg text-gray-400 mt-1">reps</span>
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-400 mt-6">Tap to adjust</p>
         </div>
 
-        {/* Upper half - Scroll number picker */}
-        <div className="flex-1 flex flex-col">
-          {logStep === 'weight' ? (
-            <ScrollNumberPicker
-              value={currentSet.weight}
-              onChange={handleWeightChange}
-              min={0}
-              max={500}
-              step={2.5}
-              suffix="kg"
-            />
-          ) : (
-            <ScrollNumberPicker
-              value={currentSet.reps}
-              onChange={handleRepsChange}
-              min={1}
-              max={50}
-              step={1}
-              suffix="reps"
-            />
-          )}
-        </div>
-
-        {/* Lower half - Recommendation info */}
+        {/* Lower section - Recommendation explanation & actions */}
         <div className="px-6 pb-8">
           {currentRecommendation && (
-            <div className="mb-6 text-center">
-              <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="mb-6 p-5 bg-gray-50 rounded-2xl">
+              <div className="flex items-center gap-2 mb-2">
                 <span className={`w-2 h-2 rounded-full ${
                   currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
                   currentRecommendation.status === 'maintain' ? 'bg-gray-400' :
@@ -1098,34 +1167,28 @@ export default function ProgressiveOverloadTracker() {
                   {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
                 </span>
               </div>
-              <p className="text-gray-500 text-sm leading-relaxed">
+              <p className="text-gray-600 text-sm leading-relaxed">
                 {currentRecommendation.message}
               </p>
             </div>
           )}
 
-          {/* Action button */}
+          {/* Log Set button */}
           <button
-            onClick={() => {
-              if (logStep === 'weight') {
-                setLogStep('reps');
-              } else {
-                logSet();
-              }
-            }}
-            disabled={logStep === 'weight' ? currentSet.weight <= 0 : currentSet.reps <= 0}
+            onClick={logSet}
+            disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
             className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {logStep === 'weight' ? 'NEXT' : 'LOG SET'}
+            LOG SET
           </button>
 
-          {/* Back button for reps step */}
-          {logStep === 'reps' && (
+          {/* Done button - shown after logging at least one set */}
+          {setsLoggedCount > 0 && (
             <button
-              onClick={() => setLogStep('weight')}
-              className="w-full h-12 text-gray-500 text-sm font-medium mt-2"
+              onClick={handleCloseLogView}
+              className="w-full h-12 text-gray-500 text-sm font-medium mt-3"
             >
-              Back to weight
+              Done
             </button>
           )}
         </div>
