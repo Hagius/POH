@@ -267,6 +267,90 @@ const Sheet = ({ isOpen, onClose, children }) => {
   );
 };
 
+// Swipeable Entry Component for history items
+const SwipeableEntry = ({ children, onEdit, onToggleActive, onDelete, isActive = true }) => {
+  const containerRef = useRef(null);
+  const [translateX, setTranslateX] = useState(0);
+  const startX = useRef(0);
+  const currentX = useRef(0);
+  const isDragging = useRef(false);
+
+  const ACTION_WIDTH = 180; // Total width of action buttons
+
+  const handleTouchStart = (e) => {
+    startX.current = e.touches[0].clientX;
+    currentX.current = translateX;
+    isDragging.current = true;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging.current) return;
+    const diff = e.touches[0].clientX - startX.current;
+    const newTranslate = Math.min(0, Math.max(-ACTION_WIDTH, currentX.current + diff));
+    setTranslateX(newTranslate);
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    // Snap to open or closed
+    if (translateX < -ACTION_WIDTH / 2) {
+      setTranslateX(-ACTION_WIDTH);
+    } else {
+      setTranslateX(0);
+    }
+  };
+
+  const closeSwipe = () => setTranslateX(0);
+
+  return (
+    <div className="relative overflow-hidden">
+      {/* Action buttons (revealed on swipe) */}
+      <div className="absolute right-0 top-0 bottom-0 flex">
+        <button
+          onClick={() => { onEdit(); closeSwipe(); }}
+          className="w-[60px] h-full bg-blue-500 flex items-center justify-center"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => { onToggleActive(); closeSwipe(); }}
+          className={`w-[60px] h-full flex items-center justify-center ${isActive ? 'bg-gray-400' : 'bg-green-500'}`}
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {isActive ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            )}
+          </svg>
+        </button>
+        <button
+          onClick={() => { onDelete(); closeSwipe(); }}
+          className="w-[60px] h-full bg-[#FF5200] flex items-center justify-center"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Swipeable content */}
+      <div
+        ref={containerRef}
+        className="relative bg-white transition-transform duration-150 ease-out"
+        style={{ transform: `translateX(${translateX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 export default function ProgressiveOverloadTracker() {
   const [entries, setEntries] = useState([]);
   const [activeTab, setActiveTab] = useState('exercises');
@@ -280,6 +364,8 @@ export default function ProgressiveOverloadTracker() {
   const [dataMode, setDataMode] = useState('demo');
   const [editingProfile, setEditingProfile] = useState(false);
   const [editedUser, setEditedUser] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [editedEntryData, setEditedEntryData] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -328,12 +414,50 @@ export default function ProgressiveOverloadTracker() {
     setEditedUser(prev => prev ? { ...prev, [field]: value } : null);
   }, []);
 
+  // Entry management handlers
+  const startEditingEntry = useCallback((entry) => {
+    setEditingEntry(entry.id);
+    setEditedEntryData({ ...entry });
+  }, []);
+
+  const cancelEditingEntry = useCallback(() => {
+    setEditingEntry(null);
+    setEditedEntryData(null);
+  }, []);
+
+  const saveEntryChanges = useCallback(() => {
+    if (editedEntryData) {
+      setEntries(prev => prev.map(e =>
+        e.id === editedEntryData.id ? editedEntryData : e
+      ));
+      setEditingEntry(null);
+      setEditedEntryData(null);
+    }
+  }, [editedEntryData]);
+
+  const updateEditedEntryField = useCallback((field, value) => {
+    setEditedEntryData(prev => prev ? { ...prev, [field]: value } : null);
+  }, []);
+
+  const toggleEntryActive = useCallback((entryId) => {
+    setEntries(prev => prev.map(e =>
+      e.id === entryId ? { ...e, isActive: e.isActive === false ? true : false } : e
+    ));
+  }, []);
+
+  const deleteEntry = useCallback((entryId) => {
+    setEntries(prev => prev.filter(e => e.id !== entryId));
+  }, []);
+
   // Computed values
   const exerciseNames = useMemo(() => [...new Set(entries.map((e) => e.name))], [entries]);
 
+  // Only consider active entries for PRs
   const personalRecords = useMemo(() => {
     const prs = {};
     entries.forEach((entry) => {
+      // Skip inactive entries
+      if (entry.isActive === false) return;
       const oneRM = calculate1RM(entry.weight, entry.reps);
       if (!prs[entry.name] || oneRM > prs[entry.name].oneRM) {
         prs[entry.name] = { oneRM, entryId: entry.id, date: entry.date, weight: entry.weight, reps: entry.reps };
@@ -559,10 +683,15 @@ export default function ProgressiveOverloadTracker() {
     const exerciseEntries = (groupedEntries[selectedExercise] || []).slice().reverse();
     const pr = personalRecords[selectedExercise];
     const recommendation = getRecommendation(selectedExercise);
-    const chartData = exerciseEntries.slice().reverse().map((e) => ({
-      date: e.date,
-      value: calculate1RM(e.weight, e.reps),
-    }));
+    // Only include active entries in chart
+    const chartData = exerciseEntries
+      .filter((e) => e.isActive !== false)
+      .slice()
+      .reverse()
+      .map((e) => ({
+        date: e.date,
+        value: calculate1RM(e.weight, e.reps),
+      }));
 
     // Calculate strength level using user's profile data
     const strengthThresholds = user ? getStrengthThresholds(
@@ -680,54 +809,70 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* 4. History - Collapsible */}
-        <div className="px-6 pb-32">
-          <button
-            onClick={() => setHistoryExpanded(!historyExpanded)}
-            className="w-full flex items-center justify-between py-3"
-          >
-            <span className="text-xs uppercase tracking-[0.2em] text-gray-400">
-              History ({exerciseEntries.length})
-            </span>
-            <svg
-              className={`w-5 h-5 text-gray-400 transition-transform ${historyExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {/* 4. History - Collapsible with swipe actions */}
+        <div className="pb-32">
+          <div className="px-6">
+            <button
+              onClick={() => setHistoryExpanded(!historyExpanded)}
+              className="w-full flex items-center justify-between py-3"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+              <span className="text-xs uppercase tracking-[0.2em] text-gray-400">
+                History ({exerciseEntries.length})
+              </span>
+              <svg
+                className={`w-5 h-5 text-gray-400 transition-transform ${historyExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <p className="text-xs text-gray-300 -mt-1 mb-2">Swipe left on entry for options</p>
+          </div>
 
           {historyExpanded && (
-            <div className="mt-2 space-y-3">
+            <div className="mt-2">
               {exerciseEntries.map((entry) => {
                 const oneRM = calculate1RM(entry.weight, entry.reps);
-                const isPR = pr?.entryId === entry.id;
+                const isPR = pr?.entryId === entry.id && entry.isActive !== false;
+                const isInactive = entry.isActive === false;
 
                 return (
-                  <div
+                  <SwipeableEntry
                     key={entry.id}
-                    className="flex items-center justify-between py-3"
+                    onEdit={() => startEditingEntry(entry)}
+                    onToggleActive={() => toggleEntryActive(entry.id)}
+                    onDelete={() => deleteEntry(entry.id)}
+                    isActive={!isInactive}
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-black">
-                          {entry.weight}kg × {entry.reps}
-                        </span>
-                        {isPR && (
-                          <span className="px-2 py-0.5 bg-[#00C805] text-white text-[10px] font-bold rounded-full">
-                            PR
+                    <div className={`flex items-center justify-between py-3 px-6 ${isInactive ? 'opacity-40' : ''}`}>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${isInactive ? 'text-gray-400 line-through' : 'text-black'}`}>
+                            {entry.weight}kg × {entry.reps}
                           </span>
-                        )}
+                          {isPR && (
+                            <span className="px-2 py-0.5 bg-[#00C805] text-white text-[10px] font-bold rounded-full">
+                              PR
+                            </span>
+                          )}
+                          {isInactive && (
+                            <span className="px-2 py-0.5 bg-gray-300 text-gray-600 text-[10px] font-bold rounded-full">
+                              EXCLUDED
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm text-gray-400">{formatDate(entry.date)}</span>
                       </div>
-                      <span className="text-sm text-gray-400">{formatDate(entry.date)}</span>
+                      <div className="text-right">
+                        <span className={`text-lg font-bold ${isInactive ? 'text-gray-400' : 'text-black'}`}>
+                          {Math.round(oneRM * 10) / 10}
+                        </span>
+                        <span className="text-sm text-gray-400 ml-1">1RM</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-black">{Math.round(oneRM * 10) / 10}</span>
-                      <span className="text-sm text-gray-400 ml-1">1RM</span>
-                    </div>
-                  </div>
+                  </SwipeableEntry>
                 );
               })}
             </div>
@@ -761,6 +906,92 @@ export default function ProgressiveOverloadTracker() {
     setCurrentSet({ weight: 0, reps: 8 });
     setLogStep('weight');
   };
+
+  // Fullscreen Edit Entry View
+  if (editingEntry && editedEntryData) {
+    return (
+      <div className="fixed inset-0 bg-white z-50 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-12 pb-4">
+          <button
+            onClick={cancelEditingEntry}
+            className="text-gray-400 flex items-center"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-xl font-bold text-black">Edit Entry</h1>
+          <button
+            onClick={saveEntryChanges}
+            className="text-[#00C805] font-semibold"
+          >
+            Save
+          </button>
+        </div>
+
+        <div className="flex-1 px-6 py-4 space-y-6">
+          {/* Weight */}
+          <div>
+            <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Weight (kg)</label>
+            <input
+              type="number"
+              value={editedEntryData.weight || ''}
+              onChange={(e) => updateEditedEntryField('weight', parseFloat(e.target.value) || 0)}
+              step="0.5"
+              className="w-full mt-2 px-4 py-4 text-2xl font-bold text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+            />
+          </div>
+
+          {/* Reps */}
+          <div>
+            <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Reps</label>
+            <input
+              type="number"
+              value={editedEntryData.reps || ''}
+              onChange={(e) => updateEditedEntryField('reps', parseInt(e.target.value) || 0)}
+              className="w-full mt-2 px-4 py-4 text-2xl font-bold text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+            />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Date</label>
+            <input
+              type="date"
+              value={editedEntryData.date || ''}
+              onChange={(e) => updateEditedEntryField('date', e.target.value)}
+              className="w-full mt-2 px-4 py-4 text-lg font-medium text-black bg-gray-50 rounded-xl border-0 focus:ring-2 focus:ring-black outline-none"
+            />
+          </div>
+
+          {/* Calculated 1RM */}
+          <div className="pt-4 border-t border-gray-100">
+            <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">Calculated 1RM</span>
+            <div className="flex items-baseline mt-2">
+              <span className="text-4xl font-extrabold text-black">
+                {Math.round(calculate1RM(editedEntryData.weight, editedEntryData.reps) * 10) / 10}
+              </span>
+              <span className="text-lg text-gray-400 ml-2">kg</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Delete button at bottom */}
+        <div className="px-6 pb-8">
+          <button
+            onClick={() => {
+              deleteEntry(editedEntryData.id);
+              cancelEditingEntry();
+            }}
+            className="w-full py-4 text-[#FF5200] font-medium"
+          >
+            Delete Entry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Fullscreen Log View
   if (showLogView) {
