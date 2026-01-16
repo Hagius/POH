@@ -3,6 +3,8 @@ import {
   LineChart,
   Line,
   ResponsiveContainer,
+  ReferenceLine,
+  YAxis,
 } from 'recharts';
 import {
   getUser,
@@ -367,6 +369,7 @@ export default function ProgressiveOverloadTracker() {
   const [editedUser, setEditedUser] = useState(null);
   const [editingEntry, setEditingEntry] = useState(null);
   const [editedEntryData, setEditedEntryData] = useState(null);
+  const [selectedChartPoint, setSelectedChartPoint] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -731,25 +734,67 @@ export default function ProgressiveOverloadTracker() {
     ) : null;
     const strengthLevel = pr && strengthThresholds ? getStrengthLevel(pr.oneRM, strengthThresholds) : null;
 
-    // Calculate weight needed for next level
-    const getNextLevelInfo = () => {
-      if (!pr || !strengthThresholds || !strengthLevel) return null;
+    // Calculate weight needed for next level and current level threshold
+    const getLevelThresholds = () => {
+      if (!strengthThresholds || !strengthLevel) return null;
       const levels = ['beginner', 'intermediate', 'advanced', 'professional'];
+      const levelColors = {
+        beginner: '#22c55e',      // Green
+        intermediate: '#3b82f6',  // Blue
+        advanced: '#a855f7',      // Purple
+        professional: '#f59e0b',  // Amber
+      };
       const currentIndex = levels.indexOf(strengthLevel);
-      if (currentIndex === levels.length - 1) return { isMax: true };
-      const nextLevel = levels[currentIndex + 1];
-      const nextThreshold = strengthThresholds[nextLevel];
-      const weightNeeded = Math.round((nextThreshold - pr.oneRM) * 10) / 10;
-      return { nextLevel, weightNeeded, nextThreshold };
+
+      // Current level's lower threshold (where this level starts)
+      const currentLevelThreshold = currentIndex === 0 ? 0 : strengthThresholds[strengthLevel];
+      const currentLevelColor = levelColors[strengthLevel];
+
+      // Next level threshold
+      const isMax = currentIndex === levels.length - 1;
+      const nextLevel = isMax ? null : levels[currentIndex + 1];
+      const nextThreshold = isMax ? null : strengthThresholds[nextLevel];
+      const nextLevelColor = isMax ? null : levelColors[nextLevel];
+
+      // Weight needed for next level
+      const weightNeeded = pr && nextThreshold ? Math.round((nextThreshold - pr.oneRM) * 10) / 10 : null;
+
+      return {
+        currentLevel: strengthLevel,
+        currentLevelThreshold,
+        currentLevelColor,
+        nextLevel,
+        nextThreshold,
+        nextLevelColor,
+        weightNeeded,
+        isMax,
+      };
     };
-    const nextLevelInfo = getNextLevelInfo();
+    const levelThresholds = getLevelThresholds();
+    const nextLevelInfo = levelThresholds ? {
+      nextLevel: levelThresholds.nextLevel,
+      weightNeeded: levelThresholds.weightNeeded,
+      nextThreshold: levelThresholds.nextThreshold,
+      isMax: levelThresholds.isMax,
+    } : null;
+
+    // Handle chart click/touch
+    const handleChartClick = (data) => {
+      if (data && data.activePayload && data.activePayload.length > 0) {
+        const point = data.activePayload[0].payload;
+        setSelectedChartPoint(point);
+      }
+    };
 
     return (
       <div className="min-h-screen bg-white">
         {/* Header */}
         <div className="px-6 pt-12 pb-4">
           <button
-            onClick={() => setActiveTab('exercises')}
+            onClick={() => {
+              setSelectedChartPoint(null);
+              setActiveTab('exercises');
+            }}
             className="flex items-center text-gray-400 mb-4"
           >
             <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -792,19 +837,77 @@ export default function ProgressiveOverloadTracker() {
         {chartData.length > 1 && (
           <div className="px-6 py-6">
             <span className="text-xs uppercase tracking-[0.2em] text-gray-400">Progress</span>
-            <div className="h-40 mt-4">
+            <div className="h-48 mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                  onClick={handleChartClick}
+                >
+                  <YAxis domain={['auto', 'auto']} hide />
+                  {/* Current level threshold line */}
+                  {levelThresholds && levelThresholds.currentLevelThreshold > 0 && (
+                    <ReferenceLine
+                      y={levelThresholds.currentLevelThreshold}
+                      stroke={levelThresholds.currentLevelColor}
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  {/* Next level threshold line */}
+                  {levelThresholds && levelThresholds.nextThreshold && (
+                    <ReferenceLine
+                      y={levelThresholds.nextThreshold}
+                      stroke={levelThresholds.nextLevelColor}
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                    />
+                  )}
                   <Line
                     type="monotone"
                     dataKey="value"
                     stroke="#000000"
                     strokeWidth={2}
-                    dot={false}
+                    dot={{ r: 4, fill: '#000000', strokeWidth: 0 }}
+                    activeDot={{ r: 6, fill: '#000000', stroke: '#fff', strokeWidth: 2 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
+            {/* Level threshold legend */}
+            {levelThresholds && (
+              <div className="flex items-center justify-center gap-6 mt-3">
+                {levelThresholds.currentLevelThreshold > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: levelThresholds.currentLevelColor }} />
+                    <span className="text-xs text-gray-500 capitalize">{levelThresholds.currentLevel}</span>
+                  </div>
+                )}
+                {levelThresholds.nextThreshold && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: levelThresholds.nextLevelColor }} />
+                    <span className="text-xs text-gray-500 capitalize">{levelThresholds.nextLevel}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Selected data point details */}
+            {selectedChartPoint && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-2xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs uppercase tracking-[0.15em] text-gray-400">Selected</span>
+                    <p className="text-lg font-bold text-black mt-1">
+                      {Math.round(selectedChartPoint.value * 10) / 10}kg
+                      <span className="text-sm font-normal text-gray-400 ml-1">1RM</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm text-gray-500">{formatDateShort(selectedChartPoint.date)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
