@@ -17,6 +17,7 @@ import {
   getCurrentUser,
   getCurrentEntries,
   saveCurrentEntries,
+  saveCurrentUser,
 } from './lib/userStore';
 import {
   getStrengthThresholds,
