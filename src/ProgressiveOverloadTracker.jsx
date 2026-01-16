@@ -481,19 +481,42 @@ export default function ProgressiveOverloadTracker() {
     return groups;
   }, [entries]);
 
-  // Get sparkline data for an exercise (last 10 sessions)
+  // Get sparkline data for an exercise (highest 1RM per day, last 10 days)
   const getSparklineData = (exerciseName) => {
     const exerciseEntries = groupedEntries[exerciseName] || [];
-    const last10 = exerciseEntries.slice(-10);
-    return last10.map((e) => ({ value: e.weight }));
+    // Group by date and get highest 1RM per day
+    const dailyBest = {};
+    exerciseEntries.forEach((e) => {
+      if (e.isActive === false) return;
+      const oneRM = calculate1RM(e.weight, e.reps);
+      if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+        dailyBest[e.date] = oneRM;
+      }
+    });
+    // Sort by date and take last 10
+    const sortedDays = Object.entries(dailyBest)
+      .sort(([a], [b]) => new Date(a) - new Date(b))
+      .slice(-10);
+    return sortedDays.map(([, value]) => ({ value }));
   };
 
-  // Get performance trend
+  // Get performance trend (comparing last two days' highest 1RM)
   const getPerformanceTrend = (exerciseName) => {
     const exerciseEntries = groupedEntries[exerciseName] || [];
-    if (exerciseEntries.length < 2) return 'neutral';
-    const recent = exerciseEntries.slice(-2);
-    const diff = recent[1].weight - recent[0].weight;
+    // Group by date and get highest 1RM per day
+    const dailyBest = {};
+    exerciseEntries.forEach((e) => {
+      if (e.isActive === false) return;
+      const oneRM = calculate1RM(e.weight, e.reps);
+      if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+        dailyBest[e.date] = oneRM;
+      }
+    });
+    const sortedDays = Object.entries(dailyBest)
+      .sort(([a], [b]) => new Date(a) - new Date(b));
+    if (sortedDays.length < 2) return 'neutral';
+    const recent = sortedDays.slice(-2);
+    const diff = recent[1][1] - recent[0][1];
     if (diff > 0) return 'up';
     if (diff < 0) return 'down';
     return 'neutral';
@@ -683,15 +706,20 @@ export default function ProgressiveOverloadTracker() {
     const exerciseEntries = (groupedEntries[selectedExercise] || []).slice().reverse();
     const pr = personalRecords[selectedExercise];
     const recommendation = getRecommendation(selectedExercise);
-    // Only include active entries in chart
-    const chartData = exerciseEntries
-      .filter((e) => e.isActive !== false)
-      .slice()
-      .reverse()
-      .map((e) => ({
-        date: e.date,
-        value: calculate1RM(e.weight, e.reps),
-      }));
+    // Only include active entries in chart, using highest 1RM per day
+    const chartData = (() => {
+      const activeEntries = exerciseEntries.filter((e) => e.isActive !== false);
+      const dailyBest = {};
+      activeEntries.forEach((e) => {
+        const oneRM = calculate1RM(e.weight, e.reps);
+        if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+          dailyBest[e.date] = oneRM;
+        }
+      });
+      return Object.entries(dailyBest)
+        .sort(([a], [b]) => new Date(a) - new Date(b))
+        .map(([date, value]) => ({ date, value }));
+    })();
 
     // Calculate strength level using user's profile data
     const strengthThresholds = user ? getStrengthThresholds(
@@ -741,6 +769,22 @@ export default function ProgressiveOverloadTracker() {
               </span>
             )}
           </div>
+          {nextLevelInfo && !nextLevelInfo.isMax && (
+            <p className="text-sm text-gray-400 mt-2">
+              <span className="font-semibold text-black">+{nextLevelInfo.weightNeeded}kg</span> to reach{' '}
+              <span className={`font-semibold ${
+                nextLevelInfo.nextLevel === 'professional' ? 'text-amber-500' :
+                nextLevelInfo.nextLevel === 'advanced' ? 'text-purple-500' :
+                nextLevelInfo.nextLevel === 'intermediate' ? 'text-blue-500' :
+                'text-green-500'
+              }`}>{nextLevelInfo.nextLevel}</span>
+            </p>
+          )}
+          {nextLevelInfo?.isMax && (
+            <p className="text-sm text-amber-500 mt-2 font-medium">
+              You've reached the highest level!
+            </p>
+          )}
         </div>
 
         {/* 1. Progress Chart */}
@@ -871,24 +915,8 @@ export default function ProgressiveOverloadTracker() {
           )}
         </div>
 
-        {/* Next Level Info & Log Button */}
+        {/* Log Button */}
         <div className="fixed bottom-24 left-6 right-6">
-          {nextLevelInfo && !nextLevelInfo.isMax && (
-            <p className="text-center text-sm text-gray-400 mb-3">
-              <span className="font-semibold text-black">+{nextLevelInfo.weightNeeded}kg</span> to reach{' '}
-              <span className={`font-semibold ${
-                nextLevelInfo.nextLevel === 'professional' ? 'text-amber-500' :
-                nextLevelInfo.nextLevel === 'advanced' ? 'text-purple-500' :
-                nextLevelInfo.nextLevel === 'intermediate' ? 'text-blue-500' :
-                'text-green-500'
-              }`}>{nextLevelInfo.nextLevel}</span>
-            </p>
-          )}
-          {nextLevelInfo?.isMax && (
-            <p className="text-center text-sm text-amber-500 mb-3 font-medium">
-              You've reached the highest level!
-            </p>
-          )}
           <button
             onClick={() => openLogView(selectedExercise)}
             className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full"
