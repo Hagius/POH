@@ -137,7 +137,7 @@ const Sparkline = ({ data, color = COLORS.text, height = 40 }) => {
 };
 
 // Scroll Number Picker Component
-const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg' }) => {
+const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg', showDecimal = true }) => {
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const startY = useRef(0);
@@ -199,16 +199,25 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
   const onMouseUp = () => handleEnd();
   const onMouseLeave = () => handleEnd();
 
-  // Format value to always show one decimal place
+  // Format value - show decimal only if showDecimal is true
   const formatValue = (v) => {
     if (typeof v !== 'number') return v;
-    return v.toFixed(1);
+    return showDecimal ? v.toFixed(1) : Math.round(v).toString();
+  };
+
+  // Calculate min-width based on max value to prevent layout shift
+  const getMinWidth = () => {
+    const maxDigits = Math.max(max, 100).toString().length;
+    if (showDecimal) {
+      return `${maxDigits + 2}ch`; // +2 for decimal point and one decimal place
+    }
+    return `${Math.max(maxDigits, 2)}ch`; // At least 2 chars for reps
   };
 
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col items-center justify-center select-none cursor-ns-resize touch-none"
+      className="flex flex-col items-center justify-center select-none cursor-ns-resize touch-none"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -220,27 +229,30 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
       {/* Up arrow - clickable */}
       <button
         onClick={increment}
-        className="text-gray-300 mb-4 hover:text-gray-500 transition-colors p-2"
+        className="text-gray-300 mb-2 hover:text-gray-500 transition-colors p-2"
       >
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
         </svg>
       </button>
 
-      {/* Value display */}
-      <div className="flex items-baseline">
-        <span className="text-8xl font-extrabold tracking-tight text-black tabular-nums">
+      {/* Value display - fixed width to prevent jumping */}
+      <div className="flex items-baseline justify-center">
+        <span
+          className="text-6xl font-extrabold tracking-tight text-black tabular-nums text-center"
+          style={{ minWidth: getMinWidth() }}
+        >
           {formatValue(value)}
         </span>
-        <span className="text-3xl font-medium text-gray-400 ml-3">{suffix}</span>
+        <span className="text-xl font-medium text-gray-400 ml-2">{suffix}</span>
       </div>
 
       {/* Down arrow - clickable */}
       <button
         onClick={decrement}
-        className="text-gray-300 mt-4 hover:text-gray-500 transition-colors p-2"
+        className="text-gray-300 mt-2 hover:text-gray-500 transition-colors p-2"
       >
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -1281,7 +1293,7 @@ export default function ProgressiveOverloadTracker() {
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-12 pb-2">
+        <div className="flex items-center justify-between px-6 pt-12 pb-2 flex-shrink-0">
           <button
             onClick={handleCloseLogView}
             className="text-gray-400 flex items-center"
@@ -1294,9 +1306,37 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
+        {/* Recommendation - at top, only show if not editing and no pending sets */}
+        {currentRecommendation && pendingSets.length === 0 && !isEditing && (
+          <div className="px-6 pt-2 pb-4 flex-shrink-0">
+            <div className="p-4 bg-gray-50 rounded-2xl">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
+                  currentRecommendation.status === 'maintain' ? 'bg-gray-400' :
+                  currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                  currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
+                  currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
+                  'bg-gray-400'
+                }`} />
+                <span className="text-xs uppercase tracking-[0.15em] text-gray-500 font-medium">
+                  {currentRecommendation.status === 'progress' && 'Progress'}
+                  {currentRecommendation.status === 'maintain' && 'Build Reps'}
+                  {currentRecommendation.status === 'deload' && 'Deload Week'}
+                  {currentRecommendation.status === 'double_jump' && 'Double Jump'}
+                  {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
+                </span>
+              </div>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                {currentRecommendation.message}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Pending sets list - scrollable with max height */}
         {pendingSets.length > 0 && (
-          <div className="px-6 pt-4 max-h-[30vh] overflow-y-auto flex-shrink-0">
+          <div className="px-6 pt-2 max-h-[25vh] overflow-y-auto flex-shrink-0">
             <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
               Sets ({pendingSets.length})
             </span>
@@ -1336,69 +1376,43 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
+        {/* Spacer to push pickers to lower third */}
+        <div className="flex-1" />
+
         {/* Current set label */}
-        <div className="px-6 pt-4 flex-shrink-0">
+        <div className="px-6 pb-2 flex-shrink-0">
           <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
             {isEditing ? `Editing Set ${editingSetIndex + 1}` : pendingSets.length > 0 ? `Set ${pendingSets.length + 1}` : 'Set 1'}
           </span>
         </div>
 
-        {/* Inline weight and reps pickers - fixed height */}
-        <div className="flex flex-row px-6 py-4 gap-4 flex-1 min-h-0">
+        {/* Inline weight and reps pickers - in lower third (thumb zone) */}
+        <div className="flex flex-row px-6 py-2 gap-8 justify-center flex-shrink-0">
           {/* Weight picker */}
-          <div className="flex-1 flex flex-col justify-center">
-            <ScrollNumberPicker
-              value={currentSet.weight}
-              onChange={handleWeightChange}
-              min={0}
-              max={500}
-              step={2.5}
-              suffix="kg"
-            />
-          </div>
+          <ScrollNumberPicker
+            value={currentSet.weight}
+            onChange={handleWeightChange}
+            min={0}
+            max={500}
+            step={2.5}
+            suffix="kg"
+            showDecimal={true}
+          />
 
           {/* Reps picker */}
-          <div className="flex-1 flex flex-col justify-center">
-            <ScrollNumberPicker
-              value={currentSet.reps}
-              onChange={handleRepsChange}
-              min={1}
-              max={50}
-              step={1}
-              suffix="reps"
-            />
-          </div>
+          <ScrollNumberPicker
+            value={currentSet.reps}
+            onChange={handleRepsChange}
+            min={1}
+            max={50}
+            step={1}
+            suffix="reps"
+            showDecimal={false}
+          />
         </div>
 
-        {/* Lower section - Recommendation & actions - fixed at bottom */}
-        <div className="px-6 pb-8 flex-shrink-0">
-          {/* Recommendation - only show if not editing and no pending sets */}
-          {currentRecommendation && pendingSets.length === 0 && !isEditing && (
-            <div className="mb-4 p-4 bg-gray-50 rounded-2xl">
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`w-2 h-2 rounded-full ${
-                  currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
-                  currentRecommendation.status === 'maintain' ? 'bg-gray-400' :
-                  currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
-                  currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
-                  currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
-                  'bg-gray-400'
-                }`} />
-                <span className="text-xs uppercase tracking-[0.15em] text-gray-500 font-medium">
-                  {currentRecommendation.status === 'progress' && 'Progress'}
-                  {currentRecommendation.status === 'maintain' && 'Build Reps'}
-                  {currentRecommendation.status === 'deload' && 'Deload Week'}
-                  {currentRecommendation.status === 'double_jump' && 'Double Jump'}
-                  {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
-                </span>
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                {currentRecommendation.message}
-              </p>
-            </div>
-          )}
-
-          {/* Action buttons */}
+        {/* Action buttons - fixed at bottom */}
+        <div className="px-6 pt-4 pb-8 flex-shrink-0">
           {isEditing ? (
             // Editing mode buttons
             <div className="flex gap-3">
@@ -1418,24 +1432,22 @@ export default function ProgressiveOverloadTracker() {
             </div>
           ) : (
             // Normal mode buttons
-            <>
-              <div className="flex gap-3 mb-3">
-                <button
-                  onClick={addSet}
-                  disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
-                  className="flex-1 h-14 border-2 border-gray-200 text-gray-600 text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  + Add Set
-                </button>
-                <button
-                  onClick={logAllSets}
-                  disabled={totalSets === 0}
-                  className="flex-1 h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  Log {totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}
-                </button>
-              </div>
-            </>
+            <div className="flex gap-3">
+              <button
+                onClick={addSet}
+                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                className="flex-1 h-14 border-2 border-gray-200 text-gray-600 text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                + Add Set
+              </button>
+              <button
+                onClick={logAllSets}
+                disabled={totalSets === 0}
+                className="flex-1 h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Log {totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}
+              </button>
+            </div>
           )}
         </div>
       </div>
