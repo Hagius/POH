@@ -245,7 +245,6 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
         </svg>
       </button>
 
-      <p className="text-sm text-gray-400 mt-6">Swipe or tap arrows to adjust</p>
     </div>
   );
 };
@@ -1295,9 +1294,9 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
-        {/* Pending sets list */}
+        {/* Pending sets list - scrollable with max height */}
         {pendingSets.length > 0 && (
-          <div className="px-6 pt-4">
+          <div className="px-6 pt-4 max-h-[30vh] overflow-y-auto flex-shrink-0">
             <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
               Sets ({pendingSets.length})
             </span>
@@ -1338,16 +1337,16 @@ export default function ProgressiveOverloadTracker() {
         )}
 
         {/* Current set label */}
-        <div className="px-6 pt-4">
+        <div className="px-6 pt-4 flex-shrink-0">
           <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
             {isEditing ? `Editing Set ${editingSetIndex + 1}` : pendingSets.length > 0 ? `Set ${pendingSets.length + 1}` : 'Set 1'}
           </span>
         </div>
 
-        {/* Inline weight and reps pickers */}
-        <div className="flex-1 flex flex-row px-6 py-4 gap-4">
+        {/* Inline weight and reps pickers - fixed height */}
+        <div className="flex flex-row px-6 py-4 gap-4 flex-1 min-h-0">
           {/* Weight picker */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col justify-center">
             <ScrollNumberPicker
               value={currentSet.weight}
               onChange={handleWeightChange}
@@ -1359,7 +1358,7 @@ export default function ProgressiveOverloadTracker() {
           </div>
 
           {/* Reps picker */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col justify-center">
             <ScrollNumberPicker
               value={currentSet.reps}
               onChange={handleRepsChange}
@@ -1371,8 +1370,8 @@ export default function ProgressiveOverloadTracker() {
           </div>
         </div>
 
-        {/* Lower section - Recommendation & actions */}
-        <div className="px-6 pb-8">
+        {/* Lower section - Recommendation & actions - fixed at bottom */}
+        <div className="px-6 pb-8 flex-shrink-0">
           {/* Recommendation - only show if not editing and no pending sets */}
           {currentRecommendation && pendingSets.length === 0 && !isEditing && (
             <div className="mb-4 p-4 bg-gray-50 rounded-2xl">
