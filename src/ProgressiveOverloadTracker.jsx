@@ -360,8 +360,9 @@ export default function ProgressiveOverloadTracker() {
   const [user, setUser] = useState(null);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [showLogView, setShowLogView] = useState(false);
-  const [logStep, setLogStep] = useState('main'); // 'main' | 'weight' | 'reps'
   const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
+  const [pendingSets, setPendingSets] = useState([]); // Sets added but not yet logged
+  const [editingSetIndex, setEditingSetIndex] = useState(null); // Which pending set is being edited
   const [setsLoggedCount, setSetsLoggedCount] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -553,22 +554,76 @@ export default function ProgressiveOverloadTracker() {
     );
   };
 
-  // Log a set
-  const logSet = () => {
-    if (!selectedExercise || !currentSet.weight || !currentSet.reps) return;
+  // Log all sets (pending + current)
+  const logAllSets = () => {
+    if (!selectedExercise) return;
 
-    const newEntry = {
+    const allSets = [...pendingSets];
+    // Add current set if valid
+    if (currentSet.weight > 0 && currentSet.reps > 0) {
+      allSets.push(currentSet);
+    }
+
+    if (allSets.length === 0) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const newEntries = allSets.map(set => ({
       id: generateId(),
       name: selectedExercise,
-      date: new Date().toISOString().split('T')[0],
-      weight: currentSet.weight,
-      reps: currentSet.reps,
+      date: today,
+      weight: set.weight,
+      reps: set.reps,
       sets: 1,
-    };
+    }));
 
-    setEntries((prev) => [...prev, newEntry]);
-    setSetsLoggedCount((prev) => prev + 1);
-    setLogStep('main'); // Return to main view to allow adding another set
+    setEntries((prev) => [...prev, ...newEntries]);
+    setSetsLoggedCount(allSets.length);
+    setShowLogView(false);
+    setPendingSets([]);
+    setEditingSetIndex(null);
+  };
+
+  // Add current set to pending and prepare for next set
+  const addSet = () => {
+    if (currentSet.weight <= 0 || currentSet.reps <= 0) return;
+    setPendingSets((prev) => [...prev, { ...currentSet }]);
+    // Keep same weight/reps for convenience
+  };
+
+  // Edit a pending set
+  const editPendingSet = (index) => {
+    setEditingSetIndex(index);
+    setCurrentSet({ ...pendingSets[index] });
+  };
+
+  // Save edited pending set
+  const saveEditedSet = () => {
+    if (editingSetIndex !== null) {
+      setPendingSets((prev) => prev.map((set, i) =>
+        i === editingSetIndex ? { ...currentSet } : set
+      ));
+      setEditingSetIndex(null);
+      // Reset to last values for new set
+      const lastSet = pendingSets[pendingSets.length - 1] || currentSet;
+      setCurrentSet({ ...lastSet });
+    }
+  };
+
+  // Cancel editing pending set
+  const cancelEditSet = () => {
+    if (editingSetIndex !== null) {
+      const lastSet = pendingSets[pendingSets.length - 1] || { weight: 20, reps: 8 };
+      setCurrentSet({ ...lastSet });
+      setEditingSetIndex(null);
+    }
+  };
+
+  // Remove a pending set
+  const removePendingSet = (index) => {
+    setPendingSets((prev) => prev.filter((_, i) => i !== index));
+    if (editingSetIndex === index) {
+      setEditingSetIndex(null);
+    }
   };
 
   // Open log view with initial values from recommendation
@@ -587,7 +642,8 @@ export default function ProgressiveOverloadTracker() {
         reps: 8,
       });
     }
-    setLogStep('main');
+    setPendingSets([]);
+    setEditingSetIndex(null);
     setSetsLoggedCount(0);
     setShowLogView(true);
   };
@@ -1127,7 +1183,8 @@ export default function ProgressiveOverloadTracker() {
   const handleCloseLogView = () => {
     setShowLogView(false);
     setCurrentSet({ weight: 0, reps: 8 });
-    setLogStep('main');
+    setPendingSets([]);
+    setEditingSetIndex(null);
     setSetsLoggedCount(0);
   };
 
@@ -1217,60 +1274,11 @@ export default function ProgressiveOverloadTracker() {
     );
   }
 
-  // Fullscreen Log View
+  // Fullscreen Log View - Single screen with inline editing
   if (showLogView) {
-    // Weight or Reps picker sub-view
-    if (logStep === 'weight' || logStep === 'reps') {
-      return (
-        <div className="fixed inset-0 bg-white z-50 flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 pt-12 pb-2">
-            <button
-              onClick={() => setLogStep('main')}
-              className="text-gray-400 flex items-center"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <h1 className="text-xl font-bold text-black">
-              {logStep === 'weight' ? 'Set Weight' : 'Set Reps'}
-            </h1>
-            <button
-              onClick={() => setLogStep('main')}
-              className="text-[#00C805] font-semibold"
-            >
-              Done
-            </button>
-          </div>
+    const totalSets = pendingSets.length + (currentSet.weight > 0 && currentSet.reps > 0 ? 1 : 0);
+    const isEditing = editingSetIndex !== null;
 
-          {/* Scroll number picker */}
-          <div className="flex-1 flex flex-col">
-            {logStep === 'weight' ? (
-              <ScrollNumberPicker
-                value={currentSet.weight}
-                onChange={handleWeightChange}
-                min={0}
-                max={500}
-                step={2.5}
-                suffix="kg"
-              />
-            ) : (
-              <ScrollNumberPicker
-                value={currentSet.reps}
-                onChange={handleRepsChange}
-                min={1}
-                max={50}
-                step={1}
-                suffix="reps"
-              />
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Main quick-log view
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
@@ -1287,55 +1295,87 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
-        {/* Sets logged indicator */}
-        {setsLoggedCount > 0 && (
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-center gap-2 py-3 bg-[#00C805]/10 rounded-2xl">
-              <svg className="w-5 h-5 text-[#00C805]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-[#00C805] font-semibold">
-                {setsLoggedCount} {setsLoggedCount === 1 ? 'set' : 'sets'} logged
-              </span>
+        {/* Pending sets list */}
+        {pendingSets.length > 0 && (
+          <div className="px-6 pt-4">
+            <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
+              Sets ({pendingSets.length})
+            </span>
+            <div className="mt-2 space-y-2">
+              {pendingSets.map((set, index) => (
+                <div
+                  key={index}
+                  className={`flex items-center justify-between p-3 rounded-xl ${
+                    editingSetIndex === index ? 'bg-black text-white' : 'bg-gray-100'
+                  }`}
+                >
+                  <button
+                    onClick={() => editingSetIndex === index ? cancelEditSet() : editPendingSet(index)}
+                    className="flex-1 text-left"
+                  >
+                    <span className={`font-semibold ${editingSetIndex === index ? 'text-white' : 'text-black'}`}>
+                      Set {index + 1}:
+                    </span>
+                    <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {set.weight}kg × {set.reps} reps
+                    </span>
+                    {editingSetIndex === index && (
+                      <span className="ml-2 text-xs text-gray-400">(editing)</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => removePendingSet(index)}
+                    className={`p-1 ${editingSetIndex === index ? 'text-gray-400' : 'text-gray-400'}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Big tappable weight × reps display */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <div className="flex items-center justify-center gap-4">
-            {/* Weight - tappable */}
-            <button
-              onClick={() => setLogStep('weight')}
-              className="flex flex-col items-center p-4 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
-            >
-              <span className="text-6xl font-extrabold text-black tabular-nums">
-                {currentSet.weight.toFixed(1)}
-              </span>
-              <span className="text-lg text-gray-400 mt-1">kg</span>
-            </button>
-
-            <span className="text-4xl text-gray-300 font-light">×</span>
-
-            {/* Reps - tappable */}
-            <button
-              onClick={() => setLogStep('reps')}
-              className="flex flex-col items-center p-4 rounded-2xl hover:bg-gray-50 active:bg-gray-100 transition-colors"
-            >
-              <span className="text-6xl font-extrabold text-black tabular-nums">
-                {currentSet.reps}
-              </span>
-              <span className="text-lg text-gray-400 mt-1">reps</span>
-            </button>
-          </div>
-
-          <p className="text-sm text-gray-400 mt-6">Tap to adjust</p>
+        {/* Current set label */}
+        <div className="px-6 pt-4">
+          <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
+            {isEditing ? `Editing Set ${editingSetIndex + 1}` : pendingSets.length > 0 ? `Set ${pendingSets.length + 1}` : 'Set 1'}
+          </span>
         </div>
 
-        {/* Lower section - Recommendation explanation & actions */}
+        {/* Inline weight and reps pickers */}
+        <div className="flex-1 flex flex-row px-6 py-4 gap-4">
+          {/* Weight picker */}
+          <div className="flex-1 flex flex-col">
+            <ScrollNumberPicker
+              value={currentSet.weight}
+              onChange={handleWeightChange}
+              min={0}
+              max={500}
+              step={2.5}
+              suffix="kg"
+            />
+          </div>
+
+          {/* Reps picker */}
+          <div className="flex-1 flex flex-col">
+            <ScrollNumberPicker
+              value={currentSet.reps}
+              onChange={handleRepsChange}
+              min={1}
+              max={50}
+              step={1}
+              suffix="reps"
+            />
+          </div>
+        </div>
+
+        {/* Lower section - Recommendation & actions */}
         <div className="px-6 pb-8">
-          {currentRecommendation && (
-            <div className="mb-6 p-5 bg-gray-50 rounded-2xl">
+          {/* Recommendation - only show if not editing and no pending sets */}
+          {currentRecommendation && pendingSets.length === 0 && !isEditing && (
+            <div className="mb-4 p-4 bg-gray-50 rounded-2xl">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`w-2 h-2 rounded-full ${
                   currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
@@ -1359,23 +1399,44 @@ export default function ProgressiveOverloadTracker() {
             </div>
           )}
 
-          {/* Log Set button */}
-          <button
-            onClick={logSet}
-            disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
-            className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            LOG SET
-          </button>
-
-          {/* Done button - shown after logging at least one set */}
-          {setsLoggedCount > 0 && (
-            <button
-              onClick={handleCloseLogView}
-              className="w-full h-12 text-gray-500 text-sm font-medium mt-3"
-            >
-              Done
-            </button>
+          {/* Action buttons */}
+          {isEditing ? (
+            // Editing mode buttons
+            <div className="flex gap-3">
+              <button
+                onClick={cancelEditSet}
+                className="flex-1 h-14 border-2 border-gray-200 text-gray-600 text-lg font-semibold rounded-full"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditedSet}
+                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                className="flex-1 h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            // Normal mode buttons
+            <>
+              <div className="flex gap-3 mb-3">
+                <button
+                  onClick={addSet}
+                  disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                  className="flex-1 h-14 border-2 border-gray-200 text-gray-600 text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  + Add Set
+                </button>
+                <button
+                  onClick={logAllSets}
+                  disabled={totalSets === 0}
+                  className="flex-1 h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Log {totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
