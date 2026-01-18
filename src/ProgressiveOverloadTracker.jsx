@@ -822,11 +822,22 @@ export default function ProgressiveOverloadTracker() {
     return 'neutral';
   };
 
-  // Get last session weight
-  const getLastWeight = (exerciseName) => {
+  // Get highest 1RM from the last session date for this exercise
+  const getLastSession1RM = (exerciseName) => {
     const exerciseEntries = groupedEntries[exerciseName] || [];
     if (exerciseEntries.length === 0) return null;
-    return exerciseEntries[exerciseEntries.length - 1].weight;
+
+    // Get the last date
+    const lastDate = exerciseEntries[exerciseEntries.length - 1].date;
+
+    // Get all entries from that date
+    const lastDayEntries = exerciseEntries.filter(e => e.date === lastDate && e.isActive !== false);
+
+    if (lastDayEntries.length === 0) return null;
+
+    // Find highest 1RM from that day
+    const highest1RM = Math.max(...lastDayEntries.map(e => calculate1RM(e.weight, e.reps)));
+    return Math.round(highest1RM * 10) / 10; // Round to 1 decimal
   };
 
   // Get recommendation for exercise
@@ -845,17 +856,12 @@ export default function ProgressiveOverloadTracker() {
     );
   };
 
-  // Log all sets (pending + current)
+  // Log all sets that have been added to the list
   const logAllSets = () => {
     if (!selectedExercise) return;
+    if (pendingSets.length === 0) return;
 
     const allSets = [...pendingSets];
-    // Add current set if valid
-    if (currentSet.weight > 0 && currentSet.reps > 0) {
-      allSets.push(currentSet);
-    }
-
-    if (allSets.length === 0) return;
 
     // Calculate reward data before logging
     const totalVolume = allSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
@@ -1017,7 +1023,7 @@ export default function ProgressiveOverloadTracker() {
         {/* Exercise List */}
         <div className="px-6">
           {allExercises.map((exercise) => {
-            const lastWeight = getLastWeight(exercise);
+            const lastSession1RM = getLastSession1RM(exercise);
             const trend = getPerformanceTrend(exercise);
             const sparkData = getSparklineData(exercise);
             const isPR = personalRecords[exercise];
@@ -1045,8 +1051,8 @@ export default function ProgressiveOverloadTracker() {
                       <span className="w-2 h-2 rounded-full bg-[#00C805]" />
                     )}
                   </div>
-                  {lastWeight && (
-                    <span className="text-xs text-gray-400">Last session</span>
+                  {lastSession1RM && (
+                    <span className="text-xs text-gray-400">Est. 1RM</span>
                   )}
                 </div>
 
@@ -1057,12 +1063,12 @@ export default function ProgressiveOverloadTracker() {
                   )}
                 </div>
 
-                {/* Weight */}
+                {/* 1RM from last session */}
                 <div className="text-right min-w-[60px]">
-                  {lastWeight ? (
+                  {lastSession1RM ? (
                     <>
                       <span className="text-lg font-bold" style={{ color: trendColor }}>
-                        {lastWeight}
+                        {lastSession1RM}
                       </span>
                       <span className="text-sm text-gray-400 ml-0.5">kg</span>
                     </>
@@ -1768,7 +1774,8 @@ export default function ProgressiveOverloadTracker() {
 
   // Fullscreen Log View - Single screen with inline editing
   if (showLogView) {
-    const totalSets = pendingSets.length + (currentSet.weight > 0 && currentSet.reps > 0 ? 1 : 0);
+    // Only count sets that have been added to the list (not picker values)
+    const totalSets = pendingSets.length;
     const isEditing = editingSetIndex !== null;
 
     // Calculate Gap indicator values
@@ -1799,15 +1806,8 @@ export default function ProgressiveOverloadTracker() {
     const isWeightRecommended = recommendedWeight && Math.abs(currentSet.weight - recommendedWeight) < 0.01;
     const isRepsRecommended = recommendedReps && currentSet.reps === recommendedReps;
 
-    // Calculate total volume for ticker display
-    const calculateVolume = (sets, current) => {
-      let vol = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-      if (current.weight > 0 && current.reps > 0) {
-        vol += current.weight * current.reps;
-      }
-      return vol;
-    };
-    const totalVolume = calculateVolume(pendingSets, currentSet);
+    // Calculate total volume for ticker display - only logged sets count
+    const totalVolume = pendingSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
 
     // Get All-Time High (max weight ever lifted for this exercise)
     const allTimeMaxWeight = personalRecords[selectedExercise]?.weight || 0;
@@ -2080,175 +2080,158 @@ export default function ProgressiveOverloadTracker() {
     );
   }
 
-  // Reward Screen - shown after logging sets
+  // Reward Screen - Swiss Style / Neo-Brutalism
   if (showRewardScreen && rewardData) {
-    // Accomplishment graphics configuration
-    const accomplishmentConfig = {
-      personal_record: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Trophy icon */}
-            <circle cx="64" cy="64" r="60" fill="#FFD700" fillOpacity="0.15" />
-            <path d="M44 36h40v8c0 16-8 28-20 32v8h12v8H52v-8h12v-8c-12-4-20-16-20-32v-8z" fill="#FFD700" />
-            <path d="M36 36h8v16c-8-2-8-12-8-16zM84 36h8c0 4 0 14-8 16V36z" fill="#FFD700" fillOpacity="0.7" />
-            <circle cx="64" cy="56" r="6" fill="white" fillOpacity="0.5" />
-          </svg>
-        ),
-        title: 'New Personal Record!',
-        subtitle: 'You crushed your previous best',
-        color: '#FFD700',
-        bgColor: 'bg-[#FFD700]/10',
-      },
-      progress: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Upward trend chart */}
-            <circle cx="64" cy="64" r="60" fill="#00C805" fillOpacity="0.15" />
-            <path d="M28 88l24-20 20 12 28-36" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M88 44h12v12" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ),
-        title: 'Progress Made!',
-        subtitle: 'Your strength is increasing',
-        color: '#00C805',
-        bgColor: 'bg-[#00C805]/10',
-      },
-      on_track: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Checkmark in circle */}
-            <circle cx="64" cy="64" r="60" fill="#00C805" fillOpacity="0.15" />
-            <circle cx="64" cy="64" r="40" stroke="#00C805" strokeWidth="4" />
-            <path d="M48 64l10 10 22-22" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ),
-        title: 'On Track',
-        subtitle: 'Consistency builds champions',
-        color: '#00C805',
-        bgColor: 'bg-[#00C805]/10',
-      },
-      deload: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Recovery/rest icon */}
-            <circle cx="64" cy="64" r="60" fill="#00F0FF" fillOpacity="0.15" />
-            <path d="M64 32c-18 0-32 14-32 32s14 32 32 32" stroke="#00F0FF" strokeWidth="4" strokeLinecap="round" />
-            <path d="M64 48v20l12 8" stroke="#00F0FF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="84" cy="44" r="4" fill="#00F0FF" />
-            <circle cx="92" cy="56" r="3" fill="#00F0FF" fillOpacity="0.6" />
-          </svg>
-        ),
-        title: 'Smart Deload',
-        subtitle: 'Recovery is part of the process',
-        color: '#00F0FF',
-        bgColor: 'bg-[#00F0FF]/10',
-      },
-      breakthrough: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Rocket/breakthrough icon */}
-            <circle cx="64" cy="64" r="60" fill="#FFD700" fillOpacity="0.15" />
-            <path d="M64 28l-16 40h12v28l20-36H68V28z" fill="#FFD700" />
-            <circle cx="64" cy="52" r="4" fill="white" fillOpacity="0.5" />
-          </svg>
-        ),
-        title: 'Breakthrough!',
-        subtitle: 'Exceptional performance',
-        color: '#FFD700',
-        bgColor: 'bg-[#FFD700]/10',
-      },
-      recovery: {
-        icon: (
-          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
-            {/* Heart/recovery icon */}
-            <circle cx="64" cy="64" r="60" fill="#F2994A" fillOpacity="0.15" />
-            <path d="M64 92s-28-20-28-40c0-12 10-20 20-20 6 0 8 4 8 4s2-4 8-4c10 0 20 8 20 20 0 20-28 40-28 40z" fill="#F2994A" />
-          </svg>
-        ),
-        title: 'Recovery Day',
-        subtitle: 'Listen to your body',
-        color: '#F2994A',
-        bgColor: 'bg-[#F2994A]/10',
-      },
-    };
+    // Determine if performance is positive or negative
+    const isPositive = rewardData.oneRMChange >= 0;
+    const accentColor = isPositive ? '#00C805' : '#FF5200';
+    const isNewPR = rewardData.isNewPR;
 
-    const config = accomplishmentConfig[rewardData.accomplishmentType] || accomplishmentConfig.on_track;
+    // Generate mini sparkline data from session
+    const sparklinePoints = rewardData.previousBest1RM > 0
+      ? [
+          { x: 0, y: rewardData.previousBest1RM },
+          { x: 1, y: rewardData.sessionBest1RM }
+        ]
+      : [{ x: 0, y: rewardData.sessionBest1RM }];
+
+    // SVG sparkline path
+    const sparklinePath = sparklinePoints.length > 1
+      ? `M 0 ${100 - (sparklinePoints[0].y / Math.max(...sparklinePoints.map(p => p.y)) * 80)} L 100 ${100 - (sparklinePoints[1].y / Math.max(...sparklinePoints.map(p => p.y)) * 80)}`
+      : '';
 
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
-        {/* Upper half - Accomplishment Graphic */}
-        <div className={`flex-1 flex flex-col items-center justify-center ${config.bgColor}`}>
-          <div className="mb-6">
-            {config.icon}
+        {/* Upper Section - Hero Performance Display */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          {/* Exercise Label */}
+          <span className="text-xs uppercase tracking-[0.25em] text-[#9CA3AF] font-medium mb-8">
+            {rewardData.exerciseName}
+          </span>
+
+          {/* Hero 1RM Value */}
+          <div className="text-center mb-4">
+            <span className="text-7xl font-extrabold text-black tracking-tight">
+              {rewardData.sessionBest1RM.toFixed(1)}
+            </span>
+            <span className="text-2xl font-medium text-[#9CA3AF] ml-2">kg</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-black mb-2">{config.title}</h1>
-          <p className="text-gray-500">{config.subtitle}</p>
+
+          {/* Performance Change - Stock Style */}
+          <div className="flex items-center gap-3 mb-8">
+            {rewardData.previousBest1RM > 0 ? (
+              <>
+                <span className={`text-4xl font-extrabold`} style={{ color: accentColor }}>
+                  {isPositive ? '+' : ''}{rewardData.oneRMChange.toFixed(1)}%
+                </span>
+                {/* Mini Trend Arrow */}
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                  {isPositive ? (
+                    <path d="M4 16l8-8 8 8" stroke={accentColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  ) : (
+                    <path d="M4 8l8 8 8-8" stroke={accentColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </svg>
+              </>
+            ) : (
+              <span className="text-2xl font-extrabold text-[#9CA3AF]">FIRST SESSION</span>
+            )}
+          </div>
+
+          {/* Status Badge */}
+          {isNewPR && (
+            <div className="px-6 py-2 rounded-full bg-[#00C805]/10">
+              <span className="text-sm font-bold uppercase tracking-[0.2em] text-[#00C805]">
+                New All-Time High
+              </span>
+            </div>
+          )}
+
+          {/* Sparkline */}
+          {sparklinePoints.length > 1 && (
+            <div className="mt-8 w-32 h-16">
+              <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
+                <path
+                  d={sparklinePath}
+                  stroke={accentColor}
+                  strokeWidth="3"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          )}
         </div>
 
-        {/* Lower half - Summary */}
-        <div className="flex-1 px-6 py-8 flex flex-col">
-          {/* Exercise name */}
-          <div className="text-center mb-6">
-            <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
-              {rewardData.exerciseName}
-            </span>
-          </div>
-
-          {/* Stats Grid */}
-          <div className="space-y-4 flex-1">
-            {/* Total Volume */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-gray-500">Total Volume</span>
-              <span className="text-xl font-bold text-black">
-                {rewardData.totalVolume.toLocaleString()} kg
-              </span>
-            </div>
-
-            {/* 1RM Change */}
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-gray-500">Est. 1RM Change</span>
-              <span className={`text-xl font-bold ${
-                rewardData.oneRMChange > 0 ? 'text-[#00C805]' :
-                rewardData.oneRMChange < 0 ? 'text-[#F2994A]' :
-                'text-gray-500'
-              }`}>
-                {rewardData.previousBest1RM > 0 ? (
-                  <>
-                    {rewardData.oneRMChange > 0 ? '▲' : rewardData.oneRMChange < 0 ? '▼' : ''}
-                    {rewardData.oneRMChange > 0 ? '+' : ''}{rewardData.oneRMChange.toFixed(1)}%
-                  </>
-                ) : (
-                  'First session!'
-                )}
-              </span>
-            </div>
-
-            {/* Next Goal */}
-            {rewardData.nextGoal && (
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-gray-500">Next Session Goal</span>
-                <span className="text-xl font-bold text-black">
-                  {rewardData.nextGoal.weight}kg × {rewardData.nextGoal.targetReps}
+        {/* Lower Section - Stats Summary */}
+        <div className="px-6 pb-8">
+          {/* Stats Grid - No borders, whitespace separation */}
+          <div className="bg-gray-50 rounded-3xl p-6 mb-6">
+            <div className="grid grid-cols-2 gap-6">
+              {/* Volume */}
+              <div>
+                <span className="text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium">
+                  Volume
                 </span>
+                <div className="mt-1">
+                  <span className="text-2xl font-extrabold text-black">
+                    {rewardData.totalVolume.toLocaleString()}
+                  </span>
+                  <span className="text-sm text-[#9CA3AF] ml-1">kg</span>
+                </div>
               </div>
-            )}
 
-            {/* Sets Logged */}
-            <div className="flex items-center justify-between py-3">
-              <span className="text-gray-500">Sets Logged</span>
-              <span className="text-xl font-bold text-black">
-                {rewardData.setsCount} {rewardData.setsCount === 1 ? 'set' : 'sets'}
-              </span>
+              {/* Sets */}
+              <div>
+                <span className="text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium">
+                  Sets
+                </span>
+                <div className="mt-1">
+                  <span className="text-2xl font-extrabold text-black">
+                    {rewardData.setsCount}
+                  </span>
+                </div>
+              </div>
+
+              {/* Previous 1RM */}
+              {rewardData.previousBest1RM > 0 && (
+                <div>
+                  <span className="text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium">
+                    Previous 1RM
+                  </span>
+                  <div className="mt-1">
+                    <span className="text-2xl font-extrabold text-black">
+                      {rewardData.previousBest1RM.toFixed(1)}
+                    </span>
+                    <span className="text-sm text-[#9CA3AF] ml-1">kg</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Target */}
+              {rewardData.nextGoal && (
+                <div>
+                  <span className="text-xs uppercase tracking-[0.2em] text-[#9CA3AF] font-medium">
+                    Next Target
+                  </span>
+                  <div className="mt-1">
+                    <span className="text-2xl font-extrabold text-black">
+                      {rewardData.nextGoal.weight}
+                    </span>
+                    <span className="text-sm text-[#9CA3AF] ml-1">kg × {rewardData.nextGoal.targetReps}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Continue Button */}
+          {/* Continue Button - Pill Shape */}
           <button
             onClick={() => {
               setShowRewardScreen(false);
               setRewardData(null);
             }}
-            className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full mt-6"
+            className="w-full h-14 bg-black text-white text-base font-semibold rounded-full"
           >
             Continue
           </button>
