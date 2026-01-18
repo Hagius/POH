@@ -137,7 +137,7 @@ const Sparkline = ({ data, color = COLORS.text, height = 40 }) => {
 };
 
 // Scroll Number Picker Component
-const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg', showDecimal = true, recommendedValue = null }) => {
+const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg', showDecimal = true, recommendedValue = null, compact = false }) => {
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const startY = useRef(0);
@@ -250,9 +250,9 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
       {/* Up arrow - clickable */}
       <button
         onClick={increment}
-        className="text-gray-300 mb-2 hover:text-gray-500 transition-colors p-2"
+        className={`text-gray-300 hover:text-gray-500 transition-colors ${compact ? 'mb-1 p-1' : 'mb-2 p-2'}`}
       >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={compact ? "w-5 h-5" : "w-6 h-6"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
         </svg>
       </button>
@@ -260,24 +260,135 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
       {/* Value display - fixed width to prevent jumping */}
       <div className="flex items-baseline justify-center">
         <span
-          className="text-6xl font-extrabold tracking-tight text-black tabular-nums text-center"
+          className={`font-extrabold tracking-tight text-black tabular-nums text-center ${compact ? 'text-5xl' : 'text-6xl'}`}
           style={{ minWidth: getMinWidth() }}
         >
           {formatValue(value)}
         </span>
-        <span className="text-xl font-medium text-gray-400 ml-2">{suffix}</span>
+        <span className={`font-medium text-gray-400 ml-1 ${compact ? 'text-base' : 'text-xl'}`}>{suffix}</span>
       </div>
 
       {/* Down arrow - clickable */}
       <button
         onClick={decrement}
-        className="text-gray-300 mt-2 hover:text-gray-500 transition-colors p-2"
+        className={`text-gray-300 hover:text-gray-500 transition-colors ${compact ? 'mt-1 p-1' : 'mt-2 p-2'}`}
       >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={compact ? "w-5 h-5" : "w-6 h-6"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
+    </div>
+  );
+};
+
+// Slide to Log Component (like Robinhood/iPhone unlock)
+const SlideToLog = ({ onComplete, disabled, label = "Slide to Log" }) => {
+  const containerRef = useRef(null);
+  const [slideX, setSlideX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
+  const startX = useRef(0);
+  const thumbWidth = 56; // w-14
+
+  const getMaxSlide = () => {
+    if (!containerRef.current) return 200;
+    return containerRef.current.offsetWidth - thumbWidth - 8; // 8 for padding
+  };
+
+  const handleStart = (clientX) => {
+    if (disabled || isComplete) return;
+    setIsDragging(true);
+    startX.current = clientX - slideX;
+  };
+
+  const handleMove = (clientX) => {
+    if (!isDragging || disabled || isComplete) return;
+    const newX = Math.max(0, Math.min(getMaxSlide(), clientX - startX.current));
+    setSlideX(newX);
+  };
+
+  const handleEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const threshold = getMaxSlide() * 0.85;
+    if (slideX >= threshold) {
+      setSlideX(getMaxSlide());
+      setIsComplete(true);
+      setTimeout(() => {
+        onComplete();
+        setSlideX(0);
+        setIsComplete(false);
+      }, 200);
+    } else {
+      setSlideX(0);
+    }
+  };
+
+  const onTouchStart = (e) => handleStart(e.touches[0].clientX);
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    handleMove(e.touches[0].clientX);
+  };
+  const onTouchEnd = () => handleEnd();
+
+  const onMouseDown = (e) => handleStart(e.clientX);
+  const onMouseMove = (e) => {
+    if (isDragging) handleMove(e.clientX);
+  };
+  const onMouseUp = () => handleEnd();
+  const onMouseLeave = () => handleEnd();
+
+  const progress = slideX / (getMaxSlide() || 1);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative h-14 rounded-full overflow-hidden select-none ${
+        disabled ? 'bg-gray-100' : 'bg-gray-100'
+      }`}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Progress fill */}
+      <div
+        className="absolute inset-y-0 left-0 bg-black/5 transition-all duration-75"
+        style={{ width: `${(slideX + thumbWidth + 4)}px` }}
+      />
+
+      {/* Label */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 1 - progress * 1.5 }}
+      >
+        <span className={`text-lg font-semibold ${disabled ? 'text-gray-300' : 'text-gray-400'}`}>
+          {label}
+        </span>
+      </div>
+
+      {/* Sliding thumb */}
+      <div
+        className={`absolute top-1 bottom-1 left-1 w-14 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
+          !isDragging && slideX === 0 ? 'duration-300' : 'duration-75'
+        } ${disabled ? 'bg-gray-300' : isComplete ? 'bg-[#00C805]' : 'bg-black'}`}
+        style={{ transform: `translateX(${slideX}px)` }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+      >
+        {isComplete ? (
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className={`w-6 h-6 ${disabled ? 'text-gray-400' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        )}
+      </div>
     </div>
   );
 };
@@ -1440,6 +1551,23 @@ export default function ProgressiveOverloadTracker() {
     const totalSets = pendingSets.length + (currentSet.weight > 0 && currentSet.reps > 0 ? 1 : 0);
     const isEditing = editingSetIndex !== null;
 
+    // Calculate Gap indicator values
+    const currentOneRM = currentSet.weight > 0 && currentSet.reps > 0
+      ? calculate1RM(currentSet.weight, currentSet.reps)
+      : 0;
+    const prOneRM = selectedExercise && personalRecords[selectedExercise]
+      ? personalRecords[selectedExercise].oneRM
+      : 0;
+    const recommendedOneRM = currentRecommendation?.nextWorkout
+      ? calculate1RM(currentRecommendation.nextWorkout.weight, currentRecommendation.nextWorkout.targetReps)
+      : 0;
+
+    // Determine gap indicator state
+    const gapPercent = prOneRM > 0 ? ((currentOneRM - prOneRM) / prOneRM * 100) : 0;
+    const isOnPlan = recommendedOneRM > 0 && Math.abs(currentOneRM - recommendedOneRM) < 0.5;
+    const isGapUp = currentOneRM > prOneRM && prOneRM > 0;
+    const isGapDown = currentOneRM < prOneRM && prOneRM > 0 && currentOneRM > 0;
+
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
@@ -1456,46 +1584,18 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
-        {/* Recommendation - at top, only show if not editing and no pending sets */}
-        {currentRecommendation && pendingSets.length === 0 && !isEditing && (
-          <div className="px-6 pt-2 pb-4 flex-shrink-0">
-            <div className="p-4 bg-gray-50 rounded-2xl">
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`w-2 h-2 rounded-full ${
-                  currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
-                  currentRecommendation.status === 'maintain' ? 'bg-gray-400' :
-                  currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
-                  currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
-                  currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
-                  'bg-gray-400'
-                }`} />
-                <span className="text-xs uppercase tracking-[0.15em] text-gray-500 font-medium">
-                  {currentRecommendation.status === 'progress' && 'Progress'}
-                  {currentRecommendation.status === 'maintain' && 'Build Reps'}
-                  {currentRecommendation.status === 'deload' && 'Deload Week'}
-                  {currentRecommendation.status === 'double_jump' && 'Double Jump'}
-                  {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
-                </span>
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                {currentRecommendation.message}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Pending sets list - scrollable with max height */}
+        {/* Pending sets list - no background, scrollable */}
         {pendingSets.length > 0 && (
-          <div className="px-6 pt-2 max-h-[25vh] overflow-y-auto flex-shrink-0">
+          <div className="px-6 pt-2 max-h-[30vh] overflow-y-auto flex-shrink-0">
             <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
               Sets ({pendingSets.length})
             </span>
-            <div className="mt-2 space-y-2">
+            <div className="mt-2 space-y-1">
               {pendingSets.map((set, index) => (
                 <div
                   key={index}
-                  className={`flex items-center justify-between p-3 rounded-xl ${
-                    editingSetIndex === index ? 'bg-black text-white' : 'bg-gray-100'
+                  className={`flex items-center justify-between py-2 ${
+                    editingSetIndex === index ? 'bg-black text-white px-3 rounded-xl -mx-3' : ''
                   }`}
                 >
                   <button
@@ -1505,16 +1605,13 @@ export default function ProgressiveOverloadTracker() {
                     <span className={`font-semibold ${editingSetIndex === index ? 'text-white' : 'text-black'}`}>
                       Set {index + 1}:
                     </span>
-                    <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-600'}`}>
+                    <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-500'}`}>
                       {set.weight}kg × {set.reps} reps
                     </span>
-                    {editingSetIndex === index && (
-                      <span className="ml-2 text-xs text-gray-400">(editing)</span>
-                    )}
                   </button>
                   <button
                     onClick={() => removePendingSet(index)}
-                    className={`p-1 ${editingSetIndex === index ? 'text-gray-400' : 'text-gray-400'}`}
+                    className="p-1 text-gray-400"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1526,71 +1623,89 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Spacer to push pickers to lower third */}
+        {/* Spacer */}
         <div className="flex-1" />
 
+        {/* Gap Indicator + Add Set Row */}
+        <div className="px-6 pb-3 flex-shrink-0">
+          <div className="flex items-center justify-center gap-3">
+            {/* Gap Indicator */}
+            {currentOneRM > 0 && (
+              <div className={`flex items-center gap-1.5 px-4 py-2 rounded-full ${
+                isOnPlan
+                  ? 'bg-gray-100 text-gray-500'
+                  : isGapUp
+                  ? 'bg-[#00C805]/10 text-[#00C805]'
+                  : isGapDown
+                  ? 'bg-[#FF5200]/10 text-[#FF5200]'
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                {isOnPlan ? (
+                  <span className="text-sm font-semibold">On Plan</span>
+                ) : isGapUp ? (
+                  <>
+                    <span className="text-base font-bold">▲</span>
+                    <span className="text-sm font-semibold">+{gapPercent.toFixed(1)}%</span>
+                  </>
+                ) : isGapDown ? (
+                  <>
+                    <span className="text-base font-bold">▼</span>
+                    <span className="text-sm font-semibold">{gapPercent.toFixed(1)}%</span>
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold">New PR</span>
+                )}
+              </div>
+            )}
+
+            {/* Add Set Button */}
+            {!isEditing && (
+              <button
+                onClick={addSet}
+                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                className="flex items-center gap-1 px-4 py-2 border-2 border-gray-200 text-gray-600 font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <span>+ Add Set</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Current set label */}
-        <div className="px-6 pb-2 flex-shrink-0">
+        <div className="px-6 pb-1 flex-shrink-0">
           <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
             {isEditing ? `Editing Set ${editingSetIndex + 1}` : pendingSets.length > 0 ? `Set ${pendingSets.length + 1}` : 'Set 1'}
           </span>
         </div>
 
-        {/* Inline weight and reps pickers - in lower third (thumb zone) */}
-        {(() => {
-          // Calculate Gap Up indicator
-          const currentOneRM = currentSet.weight > 0 && currentSet.reps > 0
-            ? calculate1RM(currentSet.weight, currentSet.reps)
-            : 0;
-          const prOneRM = selectedExercise && personalRecords[selectedExercise]
-            ? personalRecords[selectedExercise].oneRM
-            : 0;
-          const isGapUp = currentOneRM > prOneRM && prOneRM > 0;
-          const gapUpPercent = isGapUp
-            ? ((currentOneRM - prOneRM) / prOneRM * 100).toFixed(1)
-            : 0;
+        {/* Compact weight and reps pickers */}
+        <div className="flex flex-row px-6 py-2 items-center justify-center flex-shrink-0 gap-8">
+          <ScrollNumberPicker
+            value={currentSet.weight}
+            onChange={handleWeightChange}
+            min={0}
+            max={500}
+            step={2.5}
+            suffix="kg"
+            showDecimal={true}
+            recommendedValue={currentRecommendation?.nextWorkout?.weight ?? null}
+            compact={true}
+          />
+          <ScrollNumberPicker
+            value={currentSet.reps}
+            onChange={handleRepsChange}
+            min={1}
+            max={50}
+            step={1}
+            suffix="reps"
+            showDecimal={false}
+            recommendedValue={currentRecommendation?.nextWorkout?.targetReps ?? null}
+            compact={true}
+          />
+        </div>
 
-          return (
-            <div className="flex flex-row px-6 py-2 items-center justify-center flex-shrink-0">
-              {/* Weight picker */}
-              <ScrollNumberPicker
-                value={currentSet.weight}
-                onChange={handleWeightChange}
-                min={0}
-                max={500}
-                step={2.5}
-                suffix="kg"
-                showDecimal={true}
-                recommendedValue={currentRecommendation?.nextWorkout?.weight ?? null}
-              />
-
-              {/* Gap Up Indicator */}
-              <div className="w-20 flex items-center justify-center">
-                {isGapUp && (
-                  <div className="flex items-center gap-1 bg-[#00C805]/10 text-[#00C805] px-2 py-1 rounded-full">
-                    <span className="text-sm font-bold">▲</span>
-                    <span className="text-xs font-semibold">+{gapUpPercent}%</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Reps picker */}
-              <ScrollNumberPicker
-                value={currentSet.reps}
-                onChange={handleRepsChange}
-                min={1}
-                max={50}
-                step={1}
-                suffix="reps"
-                showDecimal={false}
-                recommendedValue={currentRecommendation?.nextWorkout?.targetReps ?? null}
-              />
-            </div>
-          );
-        })()}
-
-        {/* Action buttons - fixed at bottom */}
-        <div className="px-6 pt-4 pb-8 flex-shrink-0">
+        {/* Action area - fixed at bottom */}
+        <div className="px-6 pt-3 pb-8 flex-shrink-0">
           {isEditing ? (
             // Editing mode buttons
             <div className="flex gap-3">
@@ -1609,23 +1724,12 @@ export default function ProgressiveOverloadTracker() {
               </button>
             </div>
           ) : (
-            // Normal mode buttons
-            <div className="flex gap-3">
-              <button
-                onClick={addSet}
-                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
-                className="flex-1 h-14 border-2 border-gray-200 text-gray-600 text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                + Add Set
-              </button>
-              <button
-                onClick={logAllSets}
-                disabled={totalSets === 0}
-                className="flex-1 h-14 bg-black text-white text-lg font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                Log {totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}
-              </button>
-            </div>
+            // Slide to log
+            <SlideToLog
+              onComplete={logAllSets}
+              disabled={totalSets === 0}
+              label={`Slide to Log ${totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : ''}`}
+            />
           )}
         </div>
       </div>
