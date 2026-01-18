@@ -40,6 +40,187 @@ const COLORS = {
   border: '#E5E7EB',
 };
 
+// Trader Color Logic - 4 distinct states
+const TRADER_COLORS = {
+  UNDERVALUED: {
+    color: '#F2994A',      // Muted Amber
+    bg: 'bg-[#F2994A]/10',
+    text: 'text-[#F2994A]',
+    label: 'UNREALIZED GAINS',
+    description: 'Below target',
+  },
+  MARKET_PERFORM: {
+    color: '#00C805',      // Fintech Green
+    bg: 'bg-[#00C805]/15',
+    text: 'text-[#00C805]',
+    label: 'TARGET MET',
+    description: 'Exact target',
+  },
+  ALPHA: {
+    color: '#00F0FF',      // Electric Cyan
+    bg: 'bg-[#00F0FF]/15',
+    text: 'text-[#00F0FF]',
+    label: 'ALPHA GENERATED',
+    description: 'Above target',
+  },
+  ATH: {
+    color: '#FFD700',      // Gold
+    bg: 'bg-[#FFD700]/20',
+    text: 'text-[#FFD700]',
+    label: 'NEW ATH BREAKOUT',
+    description: 'All-time high',
+  },
+  NEUTRAL: {
+    color: '#9CA3AF',
+    bg: 'bg-gray-100',
+    text: 'text-gray-500',
+    label: '—',
+    description: 'No data',
+  },
+};
+
+// Helper function to determine trader state
+const getTraderState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
+  if (!inputWeight || inputWeight <= 0) return 'NEUTRAL';
+
+  // ATH: Input > All-Time Max
+  if (allTimeMaxWeight && inputWeight > allTimeMaxWeight) {
+    return 'ATH';
+  }
+
+  // Without recommendation, we can only check ATH
+  if (!recommendedWeight) return 'NEUTRAL';
+
+  // ALPHA: Above target but not ATH
+  if (inputWeight > recommendedWeight) {
+    return 'ALPHA';
+  }
+
+  // MARKET_PERFORM: Exact target (within small tolerance)
+  if (Math.abs(inputWeight - recommendedWeight) < 0.1) {
+    return 'MARKET_PERFORM';
+  }
+
+  // UNDERVALUED: Below target
+  return 'UNDERVALUED';
+};
+
+// CountUp Animation Component for Ticker Effect
+const CountUp = ({ value, duration = 800, prefix = '', suffix = '', decimals = 0 }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValue = useRef(value);
+  const animationRef = useRef(null);
+
+  useEffect(() => {
+    const startValue = previousValue.current;
+    const endValue = value;
+    const startTime = performance.now();
+
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Ease out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+
+      const currentValue = startValue + (endValue - startValue) * easeOut;
+      setDisplayValue(currentValue);
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(endValue);
+        previousValue.current = endValue;
+      }
+    };
+
+    if (startValue !== endValue) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  const formatted = decimals > 0
+    ? displayValue.toFixed(decimals)
+    : Math.round(displayValue).toLocaleString();
+
+  return <span>{prefix}{formatted}{suffix}</span>;
+};
+
+// CSS Keyframes injected once
+const injectTraderStyles = () => {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('trader-styles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'trader-styles';
+  style.textContent = `
+    /* Striped/Hashed pattern for UNDERVALUED state */
+    .trader-striped {
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(242, 153, 74, 0.1),
+        rgba(242, 153, 74, 0.1) 4px,
+        rgba(242, 153, 74, 0.2) 4px,
+        rgba(242, 153, 74, 0.2) 8px
+      );
+    }
+
+    /* Neon glow effect for ALPHA state */
+    .trader-glow {
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.4),
+                  0 0 40px rgba(0, 240, 255, 0.2),
+                  inset 0 0 20px rgba(0, 240, 255, 0.1);
+    }
+
+    /* Shimmer animation for ATH state */
+    @keyframes shimmer {
+      0% { background-position: -200% center; }
+      100% { background-position: 200% center; }
+    }
+
+    .trader-shimmer {
+      background: linear-gradient(
+        90deg,
+        rgba(255, 215, 0, 0.15) 0%,
+        rgba(255, 215, 0, 0.4) 25%,
+        rgba(255, 255, 255, 0.6) 50%,
+        rgba(255, 215, 0, 0.4) 75%,
+        rgba(255, 215, 0, 0.15) 100%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 2s ease-in-out infinite;
+    }
+
+    /* Gold metallic gradient base for ATH */
+    .trader-ath-bg {
+      background: linear-gradient(
+        135deg,
+        rgba(255, 215, 0, 0.2) 0%,
+        rgba(255, 236, 139, 0.3) 50%,
+        rgba(255, 215, 0, 0.2) 100%
+      );
+    }
+
+    /* Ticker number animation */
+    @keyframes tickerFlash {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    .ticker-flash {
+      animation: tickerFlash 0.15s ease-in-out;
+    }
+  `;
+  document.head.appendChild(style);
+};
+
 const COMMON_EXERCISES = [
   'Squat',
   'Deadlift',
@@ -519,6 +700,11 @@ export default function ProgressiveOverloadTracker() {
     setDataMode(mode);
     setUser(getCurrentUser());
     setEntries(getCurrentEntries());
+  }, []);
+
+  // Inject trader styles on mount
+  useEffect(() => {
+    injectTraderStyles();
   }, []);
 
   // Save entries when they change
@@ -1585,9 +1771,31 @@ export default function ProgressiveOverloadTracker() {
     const isWeightRecommended = recommendedWeight && Math.abs(currentSet.weight - recommendedWeight) < 0.01;
     const isRepsRecommended = recommendedReps && currentSet.reps === recommendedReps;
 
+    // Calculate total volume for ticker display
+    const calculateVolume = (sets, current) => {
+      let vol = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+      if (current.weight > 0 && current.reps > 0) {
+        vol += current.weight * current.reps;
+      }
+      return vol;
+    };
+    const totalVolume = calculateVolume(pendingSets, currentSet);
+
+    // Get All-Time High (max weight ever lifted for this exercise)
+    const allTimeMaxWeight = personalRecords[selectedExercise]?.weight || 0;
+
+    // Determine Trader State based on current input
+    const traderState = getTraderState(currentSet.weight, recommendedWeight, allTimeMaxWeight);
+    const traderConfig = TRADER_COLORS[traderState];
+
+    // Helper to get trader state for a specific set
+    const getSetTraderState = (set) => {
+      return getTraderState(set.weight, recommendedWeight, allTimeMaxWeight);
+    };
+
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
-        {/* Header */}
+        {/* Header with Total Volume Ticker */}
         <div className="flex items-center justify-between px-6 pt-12 pb-2 flex-shrink-0">
           <button
             onClick={handleCloseLogView}
@@ -1597,7 +1805,16 @@ export default function ProgressiveOverloadTracker() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-black">{selectedExercise}</h1>
+            {totalVolume > 0 && (
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-0.5">
+                Vol: <span className="font-semibold text-black tabular-nums">
+                  <CountUp value={totalVolume} duration={800} suffix=" kg" />
+                </span>
+              </div>
+            )}
+          </div>
           <div className="w-6" />
         </div>
 
@@ -1661,9 +1878,8 @@ export default function ProgressiveOverloadTracker() {
             <div className="mt-2 space-y-1 pb-4">
               {pendingSets.map((set, index) => {
                 const setGap = getSetGap(set);
-                const setGapUp = setGap !== null && setGap > 0.05;
-                const setGapDown = setGap !== null && setGap < -0.05;
-                const setGapZero = setGap !== null && Math.abs(setGap) <= 0.05;
+                const setTraderState = getSetTraderState(set);
+                const setTraderConfig = TRADER_COLORS[setTraderState];
                 return (
                   <div
                     key={index}
@@ -1681,16 +1897,24 @@ export default function ProgressiveOverloadTracker() {
                       <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-500'}`}>
                         {set.weight}kg × {set.reps} reps
                       </span>
-                      {/* Small gap indicator for this set */}
-                      {setGap !== null && (
-                        <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded ${
-                          setGapUp ? 'bg-[#00C805]/10 text-[#00C805]' :
-                          setGapDown ? 'bg-[#FF5200]/10 text-[#FF5200]' :
+                      {/* Trader state badge for this set */}
+                      {setTraderState !== 'NEUTRAL' && (
+                        <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          setTraderState === 'ATH' ? 'bg-[#FFD700]/20 text-[#FFD700]' :
+                          setTraderState === 'ALPHA' ? 'bg-[#00F0FF]/15 text-[#00F0FF]' :
+                          setTraderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15 text-[#00C805]' :
+                          setTraderState === 'UNDERVALUED' ? 'bg-[#F2994A]/15 text-[#F2994A]' :
                           'bg-gray-100 text-gray-500'
                         }`}>
-                          {setGapUp ? `▲+${setGap.toFixed(1)}%` :
-                           setGapDown ? `▼${Math.abs(setGap).toFixed(1)}%` :
-                           '0.0%'}
+                          {setTraderState === 'ATH' ? 'ATH' :
+                           setTraderState === 'ALPHA' ? 'α' :
+                           setTraderState === 'MARKET_PERFORM' ? '✓' :
+                           setTraderState === 'UNDERVALUED' ? '↓' : '—'}
+                          {setGap !== null && setGap !== 0 && (
+                            <span className="ml-1">
+                              {setGap > 0 ? '+' : ''}{setGap.toFixed(1)}%
+                            </span>
+                          )}
                         </span>
                       )}
                     </button>
@@ -1724,37 +1948,45 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Gap Indicator + Add Set Row - Equal width buttons */}
+        {/* Trader State Indicator + Add Set Row - Equal width buttons */}
         <div className="px-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            {/* Gap Indicator - flex-1 for equal width, yellow when on plan */}
-            <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
-              isOnPlan
-                ? 'bg-amber-100 text-amber-600'
-                : isGapUp
-                ? 'bg-[#00C805]/10 text-[#00C805]'
-                : isGapDown
-                ? 'bg-[#FF5200]/10 text-[#FF5200]'
-                : 'bg-gray-100 text-gray-500'
+            {/* Trader State Indicator - with visual effects based on state */}
+            <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full relative overflow-hidden ${
+              traderState === 'ATH' ? 'trader-ath-bg' :
+              traderState === 'ALPHA' ? 'bg-[#00F0FF]/15 trader-glow' :
+              traderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15' :
+              traderState === 'UNDERVALUED' ? 'trader-striped' :
+              'bg-gray-100'
             }`}>
-              {currentOneRM > 0 ? (
-                isOnPlan ? (
-                  <span className="text-base font-semibold">On Plan</span>
-                ) : isGapUp ? (
-                  <>
-                    <span className="text-lg font-bold">▲</span>
-                    <span className="text-base font-semibold">+{gapPercent.toFixed(1)}%</span>
-                  </>
-                ) : isGapDown ? (
-                  <>
-                    <span className="text-lg font-bold">▼</span>
-                    <span className="text-base font-semibold">{Math.abs(gapPercent).toFixed(1)}%</span>
-                  </>
-                ) : isZeroGap ? (
-                  <span className="text-base font-semibold">0.0%</span>
-                ) : (
-                  <span className="text-base font-semibold">New PR</span>
-                )
+              {/* Shimmer overlay for ATH */}
+              {traderState === 'ATH' && (
+                <div className="absolute inset-0 trader-shimmer pointer-events-none" />
+              )}
+
+              {currentSet.weight > 0 ? (
+                <div className="flex flex-col items-center relative z-10">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${
+                    traderState === 'ATH' ? 'text-[#FFD700]' :
+                    traderState === 'ALPHA' ? 'text-[#00F0FF]' :
+                    traderState === 'MARKET_PERFORM' ? 'text-[#00C805]' :
+                    traderState === 'UNDERVALUED' ? 'text-[#F2994A]' :
+                    'text-gray-400'
+                  }`}>
+                    {traderConfig.label}
+                  </span>
+                  {gapPercent !== 0 && currentOneRM > 0 && (
+                    <span className={`text-sm font-semibold mt-0.5 ${
+                      traderState === 'ATH' ? 'text-[#FFD700]' :
+                      traderState === 'ALPHA' ? 'text-[#00F0FF]' :
+                      traderState === 'MARKET_PERFORM' ? 'text-[#00C805]' :
+                      traderState === 'UNDERVALUED' ? 'text-[#F2994A]' :
+                      'text-gray-500'
+                    }`}>
+                      {gapPercent > 0 ? '▲' : '▼'} {gapPercent > 0 ? '+' : ''}{gapPercent.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               ) : (
                 <span className="text-base font-semibold text-gray-400">—</span>
               )}
