@@ -235,6 +235,9 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
     return `${Math.max(maxDigits, 2)}ch`; // At least 2 chars for reps
   };
 
+  // Check if current value matches recommended
+  const isRecommendedValue = recommendedValue !== null && Math.abs(value - recommendedValue) < 0.01;
+
   return (
     <div
       ref={containerRef}
@@ -257,10 +260,10 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
         </svg>
       </button>
 
-      {/* Value display - fixed width to prevent jumping */}
+      {/* Value display - fixed width to prevent jumping, yellow if recommended */}
       <div className="flex items-baseline justify-center">
         <span
-          className={`font-extrabold tracking-tight text-black tabular-nums text-center ${compact ? 'text-5xl' : 'text-6xl'}`}
+          className={`font-extrabold tracking-tight tabular-nums text-center transition-colors ${compact ? 'text-5xl' : 'text-6xl'} ${isRecommendedValue ? 'text-amber-500' : 'text-black'}`}
           style={{ minWidth: getMinWidth() }}
         >
           {formatValue(value)}
@@ -1536,6 +1539,16 @@ export default function ProgressiveOverloadTracker() {
     );
   }
 
+  // Ref for sets scroll container
+  const setsScrollRef = useRef(null);
+
+  // Scroll to bottom of sets list when a new set is added
+  useEffect(() => {
+    if (setsScrollRef.current && pendingSets.length > 0) {
+      setsScrollRef.current.scrollTop = setsScrollRef.current.scrollHeight;
+    }
+  }, [pendingSets.length]);
+
   // Fullscreen Log View - Single screen with inline editing
   if (showLogView) {
     const totalSets = pendingSets.length + (currentSet.weight > 0 && currentSet.reps > 0 ? 1 : 0);
@@ -1558,6 +1571,12 @@ export default function ProgressiveOverloadTracker() {
     const isGapUp = currentOneRM > prOneRM && prOneRM > 0;
     const isGapDown = currentOneRM < prOneRM && prOneRM > 0 && currentOneRM > 0;
 
+    // Check if weight and reps match recommendation
+    const recommendedWeight = currentRecommendation?.nextWorkout?.weight;
+    const recommendedReps = currentRecommendation?.nextWorkout?.targetReps;
+    const isWeightRecommended = recommendedWeight && Math.abs(currentSet.weight - recommendedWeight) < 0.01;
+    const isRepsRecommended = recommendedReps && currentSet.reps === recommendedReps;
+
     return (
       <div className="fixed inset-0 bg-white z-50 flex flex-col">
         {/* Header */}
@@ -1574,13 +1593,64 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
-        {/* Pending sets list - no background, scrollable */}
+        {/* Comprehensive Recommendation - shown when no sets logged yet */}
+        {pendingSets.length === 0 && currentRecommendation && !isEditing && (
+          <div className="px-6 py-6 flex-1 flex flex-col justify-center">
+            <div className="text-center">
+              <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
+                Recommendation
+              </span>
+              <div className="mt-4 flex items-center justify-center gap-6">
+                <div className="text-center">
+                  <span className="text-5xl font-extrabold text-amber-500">
+                    {recommendedWeight?.toFixed(1) || '—'}
+                  </span>
+                  <span className="text-lg text-gray-400 ml-1">kg</span>
+                </div>
+                <span className="text-2xl text-gray-300">×</span>
+                <div className="text-center">
+                  <span className="text-5xl font-extrabold text-amber-500">
+                    {recommendedReps || '—'}
+                  </span>
+                  <span className="text-lg text-gray-400 ml-1">reps</span>
+                </div>
+              </div>
+              <div className="mt-6 mx-auto max-w-xs">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <span className={`w-2 h-2 rounded-full ${
+                    currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
+                    currentRecommendation.status === 'maintain' ? 'bg-amber-400' :
+                    currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
+                    currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
+                    'bg-gray-400'
+                  }`} />
+                  <span className="text-sm uppercase tracking-[0.1em] text-gray-500 font-medium">
+                    {currentRecommendation.status === 'progress' && 'Progress'}
+                    {currentRecommendation.status === 'maintain' && 'Build Reps'}
+                    {currentRecommendation.status === 'deload' && 'Deload Week'}
+                    {currentRecommendation.status === 'double_jump' && 'Double Jump'}
+                    {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
+                  </span>
+                </div>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  {currentRecommendation.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending sets list - scrollable */}
         {pendingSets.length > 0 && (
-          <div className="px-6 pt-2 max-h-[30vh] overflow-y-auto flex-shrink-0">
+          <div
+            ref={setsScrollRef}
+            className="px-6 pt-2 flex-1 overflow-y-auto"
+          >
             <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
               Sets ({pendingSets.length})
             </span>
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1 pb-4">
               {pendingSets.map((set, index) => (
                 <div
                   key={index}
@@ -1613,16 +1683,28 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        {/* No recommendation placeholder when no sets */}
+        {pendingSets.length === 0 && !currentRecommendation && (
+          <div className="flex-1" />
+        )}
+
+        {/* Compact recommendation shown above gap indicator when sets exist */}
+        {pendingSets.length > 0 && currentRecommendation && (
+          <div className="px-6 pb-2 flex-shrink-0">
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+              <span>Recommended:</span>
+              <span className="font-semibold text-amber-500">{recommendedWeight?.toFixed(1)}kg × {recommendedReps} reps</span>
+            </div>
+          </div>
+        )}
 
         {/* Gap Indicator + Add Set Row - Equal width buttons */}
         <div className="px-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            {/* Gap Indicator - flex-1 for equal width */}
+            {/* Gap Indicator - flex-1 for equal width, yellow when on plan */}
             <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
               isOnPlan
-                ? 'bg-gray-100 text-gray-500'
+                ? 'bg-amber-100 text-amber-600'
                 : isGapUp
                 ? 'bg-[#00C805]/10 text-[#00C805]'
                 : isGapDown
