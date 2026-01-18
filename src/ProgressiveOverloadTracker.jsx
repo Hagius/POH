@@ -1568,8 +1568,16 @@ export default function ProgressiveOverloadTracker() {
     // Determine gap indicator state
     const gapPercent = prOneRM > 0 ? ((currentOneRM - prOneRM) / prOneRM * 100) : 0;
     const isOnPlan = recommendedOneRM > 0 && Math.abs(currentOneRM - recommendedOneRM) < 0.5;
-    const isGapUp = currentOneRM > prOneRM && prOneRM > 0;
-    const isGapDown = currentOneRM < prOneRM && prOneRM > 0 && currentOneRM > 0;
+    const isZeroGap = prOneRM > 0 && currentOneRM > 0 && Math.abs(gapPercent) < 0.05;
+    const isGapUp = currentOneRM > prOneRM && prOneRM > 0 && !isZeroGap;
+    const isGapDown = currentOneRM < prOneRM && prOneRM > 0 && currentOneRM > 0 && !isZeroGap;
+
+    // Helper to calculate gap for a specific set
+    const getSetGap = (set) => {
+      const setOneRM = calculate1RM(set.weight, set.reps);
+      if (prOneRM <= 0) return null;
+      return ((setOneRM - prOneRM) / prOneRM * 100);
+    };
 
     // Check if weight and reps match recommendation
     const recommendedWeight = currentRecommendation?.nextWorkout?.weight;
@@ -1651,34 +1659,52 @@ export default function ProgressiveOverloadTracker() {
               Sets ({pendingSets.length})
             </span>
             <div className="mt-2 space-y-1 pb-4">
-              {pendingSets.map((set, index) => (
-                <div
-                  key={index}
-                  className={`flex items-center justify-between py-2 ${
-                    editingSetIndex === index ? 'bg-black text-white px-3 rounded-xl -mx-3' : ''
-                  }`}
-                >
-                  <button
-                    onClick={() => editingSetIndex === index ? cancelEditSet() : editPendingSet(index)}
-                    className="flex-1 text-left"
+              {pendingSets.map((set, index) => {
+                const setGap = getSetGap(set);
+                const setGapUp = setGap !== null && setGap > 0.05;
+                const setGapDown = setGap !== null && setGap < -0.05;
+                const setGapZero = setGap !== null && Math.abs(setGap) <= 0.05;
+                return (
+                  <div
+                    key={index}
+                    className={`flex items-center justify-between py-2 ${
+                      editingSetIndex === index ? 'bg-black text-white px-3 rounded-xl -mx-3' : ''
+                    }`}
                   >
-                    <span className={`font-semibold ${editingSetIndex === index ? 'text-white' : 'text-black'}`}>
-                      Set {index + 1}:
-                    </span>
-                    <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-500'}`}>
-                      {set.weight}kg × {set.reps} reps
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => removePendingSet(index)}
-                    className="p-1 text-gray-400"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                    <button
+                      onClick={() => editingSetIndex === index ? cancelEditSet() : editPendingSet(index)}
+                      className="flex-1 text-left flex items-center"
+                    >
+                      <span className={`font-semibold ${editingSetIndex === index ? 'text-white' : 'text-black'}`}>
+                        Set {index + 1}:
+                      </span>
+                      <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-300' : 'text-gray-500'}`}>
+                        {set.weight}kg × {set.reps} reps
+                      </span>
+                      {/* Small gap indicator for this set */}
+                      {setGap !== null && (
+                        <span className={`ml-2 text-xs font-medium px-1.5 py-0.5 rounded ${
+                          setGapUp ? 'bg-[#00C805]/10 text-[#00C805]' :
+                          setGapDown ? 'bg-[#FF5200]/10 text-[#FF5200]' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {setGapUp ? `▲+${setGap.toFixed(1)}%` :
+                           setGapDown ? `▼${Math.abs(setGap).toFixed(1)}%` :
+                           '0.0%'}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => removePendingSet(index)}
+                      className="p-1 text-gray-400"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1722,8 +1748,10 @@ export default function ProgressiveOverloadTracker() {
                 ) : isGapDown ? (
                   <>
                     <span className="text-lg font-bold">▼</span>
-                    <span className="text-base font-semibold">{gapPercent.toFixed(1)}%</span>
+                    <span className="text-base font-semibold">{Math.abs(gapPercent).toFixed(1)}%</span>
                   </>
+                ) : isZeroGap ? (
+                  <span className="text-base font-semibold">0.0%</span>
                 ) : (
                   <span className="text-base font-semibold">New PR</span>
                 )
