@@ -283,17 +283,22 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
 };
 
 // Slide to Log Component (like Robinhood/iPhone unlock)
-const SlideToLog = ({ onComplete, disabled, label = "Slide to Log" }) => {
+const SlideToLog = ({ onComplete, disabled, label = "Log Set" }) => {
   const containerRef = useRef(null);
   const [slideX, setSlideX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const startX = useRef(0);
-  const thumbWidth = 56; // w-14
+
+  // Thumb width is dynamic based on label length, approximately 40% of container
+  const getThumbWidth = () => {
+    if (!containerRef.current) return 160;
+    return Math.min(containerRef.current.offsetWidth * 0.45, 200);
+  };
 
   const getMaxSlide = () => {
     if (!containerRef.current) return 200;
-    return containerRef.current.offsetWidth - thumbWidth - 8; // 8 for padding
+    return containerRef.current.offsetWidth - getThumbWidth() - 8;
   };
 
   const handleStart = (clientX) => {
@@ -312,7 +317,7 @@ const SlideToLog = ({ onComplete, disabled, label = "Slide to Log" }) => {
     if (!isDragging) return;
     setIsDragging(false);
 
-    const threshold = getMaxSlide() * 0.85;
+    const threshold = getMaxSlide() * 0.8;
     if (slideX >= threshold) {
       setSlideX(getMaxSlide());
       setIsComplete(true);
@@ -340,40 +345,25 @@ const SlideToLog = ({ onComplete, disabled, label = "Slide to Log" }) => {
   const onMouseUp = () => handleEnd();
   const onMouseLeave = () => handleEnd();
 
-  const progress = slideX / (getMaxSlide() || 1);
-
   return (
     <div
       ref={containerRef}
-      className={`relative h-14 rounded-full overflow-hidden select-none ${
+      className={`relative h-16 rounded-full overflow-hidden select-none ${
         disabled ? 'bg-gray-100' : 'bg-gray-100'
       }`}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseLeave}
     >
-      {/* Progress fill */}
+      {/* Sliding thumb with label inside */}
       <div
-        className="absolute inset-y-0 left-0 bg-black/5 transition-all duration-75"
-        style={{ width: `${(slideX + thumbWidth + 4)}px` }}
-      />
-
-      {/* Label */}
-      <div
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 1 - progress * 1.5 }}
-      >
-        <span className={`text-lg font-semibold ${disabled ? 'text-gray-300' : 'text-gray-400'}`}>
-          {label}
-        </span>
-      </div>
-
-      {/* Sliding thumb */}
-      <div
-        className={`absolute top-1 bottom-1 left-1 w-14 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
+        className={`absolute top-1 bottom-1 left-1 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
           !isDragging && slideX === 0 ? 'duration-300' : 'duration-75'
         } ${disabled ? 'bg-gray-300' : isComplete ? 'bg-[#00C805]' : 'bg-black'}`}
-        style={{ transform: `translateX(${slideX}px)` }}
+        style={{
+          transform: `translateX(${slideX}px)`,
+          width: `${getThumbWidth()}px`
+        }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -384,9 +374,9 @@ const SlideToLog = ({ onComplete, disabled, label = "Slide to Log" }) => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         ) : (
-          <svg className={`w-6 h-6 ${disabled ? 'text-gray-400' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-          </svg>
+          <span className={`text-base font-semibold ${disabled ? 'text-gray-400' : 'text-white'}`}>
+            {label}
+          </span>
         )}
       </div>
     </div>
@@ -1626,46 +1616,48 @@ export default function ProgressiveOverloadTracker() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Gap Indicator + Add Set Row */}
-        <div className="px-6 pb-3 flex-shrink-0">
-          <div className="flex items-center justify-center gap-3">
-            {/* Gap Indicator */}
-            {currentOneRM > 0 && (
-              <div className={`flex items-center gap-1.5 px-4 py-2 rounded-full ${
-                isOnPlan
-                  ? 'bg-gray-100 text-gray-500'
-                  : isGapUp
-                  ? 'bg-[#00C805]/10 text-[#00C805]'
-                  : isGapDown
-                  ? 'bg-[#FF5200]/10 text-[#FF5200]'
-                  : 'bg-gray-100 text-gray-500'
-              }`}>
-                {isOnPlan ? (
-                  <span className="text-sm font-semibold">On Plan</span>
+        {/* Gap Indicator + Add Set Row - Equal width buttons */}
+        <div className="px-6 pb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Gap Indicator - flex-1 for equal width */}
+            <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
+              isOnPlan
+                ? 'bg-gray-100 text-gray-500'
+                : isGapUp
+                ? 'bg-[#00C805]/10 text-[#00C805]'
+                : isGapDown
+                ? 'bg-[#FF5200]/10 text-[#FF5200]'
+                : 'bg-gray-100 text-gray-500'
+            }`}>
+              {currentOneRM > 0 ? (
+                isOnPlan ? (
+                  <span className="text-base font-semibold">On Plan</span>
                 ) : isGapUp ? (
                   <>
-                    <span className="text-base font-bold">▲</span>
-                    <span className="text-sm font-semibold">+{gapPercent.toFixed(1)}%</span>
+                    <span className="text-lg font-bold">▲</span>
+                    <span className="text-base font-semibold">+{gapPercent.toFixed(1)}%</span>
                   </>
                 ) : isGapDown ? (
                   <>
-                    <span className="text-base font-bold">▼</span>
-                    <span className="text-sm font-semibold">{gapPercent.toFixed(1)}%</span>
+                    <span className="text-lg font-bold">▼</span>
+                    <span className="text-base font-semibold">{gapPercent.toFixed(1)}%</span>
                   </>
                 ) : (
-                  <span className="text-sm font-semibold">New PR</span>
-                )}
-              </div>
-            )}
+                  <span className="text-base font-semibold">New PR</span>
+                )
+              ) : (
+                <span className="text-base font-semibold text-gray-400">—</span>
+              )}
+            </div>
 
-            {/* Add Set Button */}
+            {/* Add Set Button - flex-1 for equal width */}
             {!isEditing && (
               <button
                 onClick={addSet}
                 disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
-                className="flex items-center gap-1 px-4 py-2 border-2 border-gray-200 text-gray-600 font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex-1 h-16 flex items-center justify-center border-2 border-gray-200 text-gray-600 text-base font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                <span>+ Add Set</span>
+                + Add Set
               </button>
             )}
           </div>
@@ -1728,7 +1720,7 @@ export default function ProgressiveOverloadTracker() {
             <SlideToLog
               onComplete={logAllSets}
               disabled={totalSets === 0}
-              label={`Slide to Log ${totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : ''}`}
+              label={`Log ${totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}`}
             />
           )}
         </div>
