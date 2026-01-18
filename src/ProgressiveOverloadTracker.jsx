@@ -235,33 +235,6 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
     return `${Math.max(maxDigits, 2)}ch`; // At least 2 chars for reps
   };
 
-  // Determine indicator based on comparison with recommended value
-  const getIndicator = () => {
-    if (recommendedValue === null) return null;
-
-    const tolerance = 0.01; // Small tolerance for floating point comparison
-    if (Math.abs(value - recommendedValue) < tolerance) {
-      // Exact match - green dot
-      return (
-        <span className="w-2 h-2 rounded-full bg-[#00C805]" />
-      );
-    } else if (value > recommendedValue) {
-      // Above recommended - green up arrow
-      return (
-        <svg className="w-3 h-3 text-[#00C805]" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 4l-8 8h5v8h6v-8h5z" />
-        </svg>
-      );
-    } else {
-      // Below recommended - red down arrow
-      return (
-        <svg className="w-3 h-3 text-[#FF5200]" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 20l8-8h-5V4H9v8H4z" />
-        </svg>
-      );
-    }
-  };
-
   return (
     <div
       ref={containerRef}
@@ -292,13 +265,7 @@ const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, s
         >
           {formatValue(value)}
         </span>
-        <div className="flex flex-col items-start ml-2">
-          {/* Indicator above suffix */}
-          <div className="h-4 flex items-center justify-center">
-            {getIndicator()}
-          </div>
-          <span className="text-xl font-medium text-gray-400">{suffix}</span>
-        </div>
+        <span className="text-xl font-medium text-gray-400 ml-2">{suffix}</span>
       </div>
 
       {/* Down arrow - clickable */}
@@ -1570,31 +1537,57 @@ export default function ProgressiveOverloadTracker() {
         </div>
 
         {/* Inline weight and reps pickers - in lower third (thumb zone) */}
-        <div className="flex flex-row px-6 py-2 gap-8 justify-center flex-shrink-0">
-          {/* Weight picker */}
-          <ScrollNumberPicker
-            value={currentSet.weight}
-            onChange={handleWeightChange}
-            min={0}
-            max={500}
-            step={2.5}
-            suffix="kg"
-            showDecimal={true}
-            recommendedValue={currentRecommendation?.nextWorkout?.weight ?? null}
-          />
+        {(() => {
+          // Calculate Gap Up indicator
+          const currentOneRM = currentSet.weight > 0 && currentSet.reps > 0
+            ? calculate1RM(currentSet.weight, currentSet.reps)
+            : 0;
+          const prOneRM = selectedExercise && personalRecords[selectedExercise]
+            ? personalRecords[selectedExercise].oneRM
+            : 0;
+          const isGapUp = currentOneRM > prOneRM && prOneRM > 0;
+          const gapUpPercent = isGapUp
+            ? ((currentOneRM - prOneRM) / prOneRM * 100).toFixed(1)
+            : 0;
 
-          {/* Reps picker */}
-          <ScrollNumberPicker
-            value={currentSet.reps}
-            onChange={handleRepsChange}
-            min={1}
-            max={50}
-            step={1}
-            suffix="reps"
-            showDecimal={false}
-            recommendedValue={currentRecommendation?.nextWorkout?.targetReps ?? null}
-          />
-        </div>
+          return (
+            <div className="flex flex-row px-6 py-2 items-center justify-center flex-shrink-0">
+              {/* Weight picker */}
+              <ScrollNumberPicker
+                value={currentSet.weight}
+                onChange={handleWeightChange}
+                min={0}
+                max={500}
+                step={2.5}
+                suffix="kg"
+                showDecimal={true}
+                recommendedValue={currentRecommendation?.nextWorkout?.weight ?? null}
+              />
+
+              {/* Gap Up Indicator */}
+              <div className="w-20 flex items-center justify-center">
+                {isGapUp && (
+                  <div className="flex items-center gap-1 bg-[#00C805]/10 text-[#00C805] px-2 py-1 rounded-full">
+                    <span className="text-sm font-bold">▲</span>
+                    <span className="text-xs font-semibold">+{gapUpPercent}%</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Reps picker */}
+              <ScrollNumberPicker
+                value={currentSet.reps}
+                onChange={handleRepsChange}
+                min={1}
+                max={50}
+                step={1}
+                suffix="reps"
+                showDecimal={false}
+                recommendedValue={currentRecommendation?.nextWorkout?.targetReps ?? null}
+              />
+            </div>
+          );
+        })()}
 
         {/* Action buttons - fixed at bottom */}
         <div className="px-6 pt-4 pb-8 flex-shrink-0">
