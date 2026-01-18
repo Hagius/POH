@@ -430,6 +430,7 @@ export default function ProgressiveOverloadTracker() {
   const [editingSetIndex, setEditingSetIndex] = useState(null); // Which pending set is being edited
   const [setsLoggedCount, setSetsLoggedCount] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [showLevelOverview, setShowLevelOverview] = useState(false);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [dataMode, setDataMode] = useState('demo');
   const [editingProfile, setEditingProfile] = useState(false);
@@ -959,6 +960,131 @@ export default function ProgressiveOverloadTracker() {
       setChartAnimated(true);
     };
 
+    // Level Overview Modal
+    if (showLevelOverview && strengthThresholds) {
+      const levels = [
+        { key: 'beginner', name: 'Beginner', color: 'bg-green-500', textColor: 'text-green-600', range: `0 - ${strengthThresholds.intermediate - 1}kg` },
+        { key: 'intermediate', name: 'Intermediate', color: 'bg-blue-500', textColor: 'text-blue-600', range: `${strengthThresholds.intermediate} - ${strengthThresholds.advanced - 1}kg` },
+        { key: 'advanced', name: 'Advanced', color: 'bg-purple-500', textColor: 'text-purple-600', range: `${strengthThresholds.advanced} - ${strengthThresholds.professional - 1}kg` },
+        { key: 'professional', name: 'Professional', color: 'bg-amber-400', textColor: 'text-amber-600', range: `${strengthThresholds.professional}kg+` },
+      ];
+
+      const currentOneRM = pr?.oneRM || 0;
+
+      return (
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-12 pb-4 border-b border-gray-100">
+            <button
+              onClick={() => setShowLevelOverview(false)}
+              className="text-gray-400 flex items-center"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <h1 className="text-xl font-bold text-black">Strength Levels</h1>
+            <div className="w-6" />
+          </div>
+
+          {/* Exercise & Current Stats */}
+          <div className="px-6 py-6 bg-gray-50">
+            <h2 className="text-2xl font-bold text-black">{selectedExercise}</h2>
+            <p className="text-gray-500 mt-1">Based on your profile: {user?.bodyweight || 75}kg, {user?.age || 30}y, {user?.sex || 'male'}</p>
+            {pr && (
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className="text-4xl font-extrabold text-black">{Math.round(currentOneRM)}kg</span>
+                <span className="text-gray-400">estimated 1RM</span>
+              </div>
+            )}
+          </div>
+
+          {/* Levels List */}
+          <div className="flex-1 px-6 py-6 overflow-y-auto">
+            <div className="space-y-3">
+              {levels.map((level, index) => {
+                const isCurrentLevel = strengthLevel === level.key;
+                const isPastLevel = levels.findIndex(l => l.key === strengthLevel) > index;
+                const threshold = strengthThresholds[level.key];
+
+                // Calculate progress within this level
+                let progressPercent = 0;
+                if (isCurrentLevel && currentOneRM > 0) {
+                  const lowerBound = index === 0 ? 0 : strengthThresholds[levels[index - 1].key];
+                  const upperBound = threshold;
+                  progressPercent = Math.min(100, Math.max(0, ((currentOneRM - lowerBound) / (upperBound - lowerBound)) * 100));
+                }
+
+                return (
+                  <div
+                    key={level.key}
+                    className={`p-4 rounded-2xl border-2 transition-all ${
+                      isCurrentLevel
+                        ? 'border-black bg-white shadow-lg'
+                        : isPastLevel
+                        ? 'border-gray-200 bg-gray-50'
+                        : 'border-gray-100 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full ${level.color} ${isPastLevel ? 'opacity-50' : ''}`} />
+                        <div>
+                          <span className={`font-bold ${isCurrentLevel ? 'text-black' : isPastLevel ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {level.name}
+                          </span>
+                          {isCurrentLevel && (
+                            <span className="ml-2 text-xs bg-black text-white px-2 py-0.5 rounded-full">
+                              Current
+                            </span>
+                          )}
+                          {isPastLevel && (
+                            <span className="ml-2 text-xs text-gray-400">
+                              ✓ Achieved
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-semibold ${isCurrentLevel ? level.textColor : 'text-gray-400'}`}>
+                          {level.range}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress bar for current level */}
+                    {isCurrentLevel && (
+                      <div className="mt-3">
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${level.color} transition-all duration-500`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between mt-2 text-xs text-gray-400">
+                          <span>{Math.round(currentOneRM)}kg</span>
+                          <span>{threshold}kg</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Multiplier Info */}
+            <div className="mt-8 p-4 bg-gray-50 rounded-2xl">
+              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-2">How levels are calculated</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Strength levels are based on your estimated 1 rep max (1RM) relative to your bodyweight, adjusted for age.
+                These standards help you track your progress compared to typical lifters at each experience level.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-white">
         {/* Header */}
@@ -979,14 +1105,17 @@ export default function ProgressiveOverloadTracker() {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-extrabold text-black">{selectedExercise}</h1>
             {strengthLevel && (
-              <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${
-                strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
-                strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
-                strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
-                'bg-green-500 text-white'
-              }`}>
+              <button
+                onClick={() => setShowLevelOverview(true)}
+                className={`px-3 py-1 text-xs font-bold rounded-full uppercase transition-transform active:scale-95 ${
+                  strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
+                  strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
+                  strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
+                  'bg-green-500 text-white'
+                }`}
+              >
                 {strengthLevel}
-              </span>
+              </button>
             )}
           </div>
           {nextLevelInfo && !nextLevelInfo.isMax && (
