@@ -658,6 +658,10 @@ export default function ProgressiveOverloadTracker() {
   const [chartAnimated, setChartAnimated] = useState(false);
   const chartContainerRef = useRef(null);
 
+  // Reward screen state
+  const [showRewardScreen, setShowRewardScreen] = useState(false);
+  const [rewardData, setRewardData] = useState(null);
+
   // Load data on mount
   useEffect(() => {
     const mode = getDataMode();
@@ -853,6 +857,66 @@ export default function ProgressiveOverloadTracker() {
 
     if (allSets.length === 0) return;
 
+    // Calculate reward data before logging
+    const totalVolume = allSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+
+    // Find best 1RM from this session
+    const sessionBest1RM = Math.max(...allSets.map(s => calculate1RM(s.weight, s.reps)));
+
+    // Get previous session's best 1RM for this exercise
+    const exerciseHistory = entries
+      .filter(e => e.name === selectedExercise && e.isActive !== false)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const previousBest1RM = exerciseHistory.length > 0
+      ? Math.max(...exerciseHistory.map(e => calculate1RM(e.weight, e.reps)))
+      : 0;
+
+    // Calculate 1RM percentage change
+    const oneRMChange = previousBest1RM > 0
+      ? ((sessionBest1RM - previousBest1RM) / previousBest1RM * 100)
+      : 0;
+
+    // Get current PR for this exercise
+    const currentPR = personalRecords[selectedExercise]?.oneRM || 0;
+
+    // Determine accomplishment type
+    let accomplishmentType = 'on_track'; // default
+    const recommendation = getRecommendation(selectedExercise);
+
+    if (sessionBest1RM > currentPR && currentPR > 0) {
+      accomplishmentType = 'personal_record';
+    } else if (recommendation?.status === 'deload') {
+      accomplishmentType = 'deload';
+    } else if (recommendation?.status === 'double_jump') {
+      accomplishmentType = 'breakthrough';
+    } else if (oneRMChange >= 2) {
+      accomplishmentType = 'progress';
+    } else if (oneRMChange < -5) {
+      accomplishmentType = 'recovery';
+    }
+
+    // Get next session goal
+    const nextRecommendation = getNextWorkoutRecommendation(
+      { weight: allSets[0].weight, reps: allSets[0].reps, sets: allSets.length },
+      selectedExercise,
+      exerciseHistory
+    );
+
+    // Store reward data
+    setRewardData({
+      exerciseName: selectedExercise,
+      accomplishmentType,
+      totalVolume,
+      setsCount: allSets.length,
+      sessionBest1RM,
+      previousBest1RM,
+      oneRMChange,
+      isNewPR: sessionBest1RM > currentPR && currentPR > 0,
+      nextGoal: nextRecommendation?.nextWorkout || null,
+      recommendation: nextRecommendation,
+    });
+
     const today = new Date().toISOString().split('T')[0];
     const newEntries = allSets.map(set => ({
       id: generateId(),
@@ -868,6 +932,9 @@ export default function ProgressiveOverloadTracker() {
     setShowLogView(false);
     setPendingSets([]);
     setEditingSetIndex(null);
+
+    // Show reward screen
+    setShowRewardScreen(true);
   };
 
   // Add current set to pending and prepare for next set
@@ -2008,6 +2075,183 @@ export default function ProgressiveOverloadTracker() {
               label={`Log ${totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}`}
             />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Reward Screen - shown after logging sets
+  if (showRewardScreen && rewardData) {
+    // Accomplishment graphics configuration
+    const accomplishmentConfig = {
+      personal_record: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Trophy icon */}
+            <circle cx="64" cy="64" r="60" fill="#FFD700" fillOpacity="0.15" />
+            <path d="M44 36h40v8c0 16-8 28-20 32v8h12v8H52v-8h12v-8c-12-4-20-16-20-32v-8z" fill="#FFD700" />
+            <path d="M36 36h8v16c-8-2-8-12-8-16zM84 36h8c0 4 0 14-8 16V36z" fill="#FFD700" fillOpacity="0.7" />
+            <circle cx="64" cy="56" r="6" fill="white" fillOpacity="0.5" />
+          </svg>
+        ),
+        title: 'New Personal Record!',
+        subtitle: 'You crushed your previous best',
+        color: '#FFD700',
+        bgColor: 'bg-[#FFD700]/10',
+      },
+      progress: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Upward trend chart */}
+            <circle cx="64" cy="64" r="60" fill="#00C805" fillOpacity="0.15" />
+            <path d="M28 88l24-20 20 12 28-36" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M88 44h12v12" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+        title: 'Progress Made!',
+        subtitle: 'Your strength is increasing',
+        color: '#00C805',
+        bgColor: 'bg-[#00C805]/10',
+      },
+      on_track: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Checkmark in circle */}
+            <circle cx="64" cy="64" r="60" fill="#00C805" fillOpacity="0.15" />
+            <circle cx="64" cy="64" r="40" stroke="#00C805" strokeWidth="4" />
+            <path d="M48 64l10 10 22-22" stroke="#00C805" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ),
+        title: 'On Track',
+        subtitle: 'Consistency builds champions',
+        color: '#00C805',
+        bgColor: 'bg-[#00C805]/10',
+      },
+      deload: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Recovery/rest icon */}
+            <circle cx="64" cy="64" r="60" fill="#00F0FF" fillOpacity="0.15" />
+            <path d="M64 32c-18 0-32 14-32 32s14 32 32 32" stroke="#00F0FF" strokeWidth="4" strokeLinecap="round" />
+            <path d="M64 48v20l12 8" stroke="#00F0FF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="84" cy="44" r="4" fill="#00F0FF" />
+            <circle cx="92" cy="56" r="3" fill="#00F0FF" fillOpacity="0.6" />
+          </svg>
+        ),
+        title: 'Smart Deload',
+        subtitle: 'Recovery is part of the process',
+        color: '#00F0FF',
+        bgColor: 'bg-[#00F0FF]/10',
+      },
+      breakthrough: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Rocket/breakthrough icon */}
+            <circle cx="64" cy="64" r="60" fill="#FFD700" fillOpacity="0.15" />
+            <path d="M64 28l-16 40h12v28l20-36H68V28z" fill="#FFD700" />
+            <circle cx="64" cy="52" r="4" fill="white" fillOpacity="0.5" />
+          </svg>
+        ),
+        title: 'Breakthrough!',
+        subtitle: 'Exceptional performance',
+        color: '#FFD700',
+        bgColor: 'bg-[#FFD700]/10',
+      },
+      recovery: {
+        icon: (
+          <svg className="w-32 h-32" viewBox="0 0 128 128" fill="none">
+            {/* Heart/recovery icon */}
+            <circle cx="64" cy="64" r="60" fill="#F2994A" fillOpacity="0.15" />
+            <path d="M64 92s-28-20-28-40c0-12 10-20 20-20 6 0 8 4 8 4s2-4 8-4c10 0 20 8 20 20 0 20-28 40-28 40z" fill="#F2994A" />
+          </svg>
+        ),
+        title: 'Recovery Day',
+        subtitle: 'Listen to your body',
+        color: '#F2994A',
+        bgColor: 'bg-[#F2994A]/10',
+      },
+    };
+
+    const config = accomplishmentConfig[rewardData.accomplishmentType] || accomplishmentConfig.on_track;
+
+    return (
+      <div className="fixed inset-0 bg-white z-50 flex flex-col">
+        {/* Upper half - Accomplishment Graphic */}
+        <div className={`flex-1 flex flex-col items-center justify-center ${config.bgColor}`}>
+          <div className="mb-6">
+            {config.icon}
+          </div>
+          <h1 className="text-2xl font-extrabold text-black mb-2">{config.title}</h1>
+          <p className="text-gray-500">{config.subtitle}</p>
+        </div>
+
+        {/* Lower half - Summary */}
+        <div className="flex-1 px-6 py-8 flex flex-col">
+          {/* Exercise name */}
+          <div className="text-center mb-6">
+            <span className="text-xs uppercase tracking-[0.15em] text-gray-400 font-medium">
+              {rewardData.exerciseName}
+            </span>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="space-y-4 flex-1">
+            {/* Total Volume */}
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <span className="text-gray-500">Total Volume</span>
+              <span className="text-xl font-bold text-black">
+                {rewardData.totalVolume.toLocaleString()} kg
+              </span>
+            </div>
+
+            {/* 1RM Change */}
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <span className="text-gray-500">Est. 1RM Change</span>
+              <span className={`text-xl font-bold ${
+                rewardData.oneRMChange > 0 ? 'text-[#00C805]' :
+                rewardData.oneRMChange < 0 ? 'text-[#F2994A]' :
+                'text-gray-500'
+              }`}>
+                {rewardData.previousBest1RM > 0 ? (
+                  <>
+                    {rewardData.oneRMChange > 0 ? '▲' : rewardData.oneRMChange < 0 ? '▼' : ''}
+                    {rewardData.oneRMChange > 0 ? '+' : ''}{rewardData.oneRMChange.toFixed(1)}%
+                  </>
+                ) : (
+                  'First session!'
+                )}
+              </span>
+            </div>
+
+            {/* Next Goal */}
+            {rewardData.nextGoal && (
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-gray-500">Next Session Goal</span>
+                <span className="text-xl font-bold text-black">
+                  {rewardData.nextGoal.weight}kg × {rewardData.nextGoal.targetReps}
+                </span>
+              </div>
+            )}
+
+            {/* Sets Logged */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-gray-500">Sets Logged</span>
+              <span className="text-xl font-bold text-black">
+                {rewardData.setsCount} {rewardData.setsCount === 1 ? 'set' : 'sets'}
+              </span>
+            </div>
+          </div>
+
+          {/* Continue Button */}
+          <button
+            onClick={() => {
+              setShowRewardScreen(false);
+              setRewardData(null);
+            }}
+            className="w-full h-14 bg-black text-white text-lg font-semibold rounded-full mt-6"
+          >
+            Continue
+          </button>
         </div>
       </div>
     );
