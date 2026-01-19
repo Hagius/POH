@@ -1575,6 +1575,12 @@ export default function ProgressiveOverloadTracker() {
               <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
             </div>
             <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+            <button
+              onClick={() => openLogView(selectedExercise)}
+              className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
+            >
+              Start Now
+            </button>
           </div>
         )}
 
@@ -1598,7 +1604,7 @@ export default function ProgressiveOverloadTracker() {
         )}
 
         {/* 4. History - Collapsible with swipe actions */}
-        <div className="pb-32">
+        <div className="pb-8">
           <div className="px-6">
             <button
               onClick={() => setHistoryExpanded(!historyExpanded)}
@@ -1667,16 +1673,6 @@ export default function ProgressiveOverloadTracker() {
             </div>
           )}
         </div>
-
-        {/* FAB to Log */}
-        <button
-          onClick={() => openLogView(selectedExercise)}
-          className={`fixed bottom-24 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${dm('bg-black', 'bg-white')}`}
-        >
-          <svg className={`w-7 h-7 ${dm('text-white', 'text-black')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
       </div>
     );
   };
