@@ -23,6 +23,11 @@
  * @property {'progressing'|'plateau'|'regressing'|'insufficient_data'} training_status
  * @property {string} progression_rationale
  * @property {string[]|null} flags
+ * @property {Object|null} reasoning_breakdown - Detailed explanation of recommendation
+ * @property {string} reasoning_breakdown.last_session - Description of last session
+ * @property {string} reasoning_breakdown.trend - Performance trend
+ * @property {string} reasoning_breakdown.next_step - What to do next
+ * @property {string} reasoning_breakdown.calculation - How weight was calculated
  */
 
 /**
@@ -165,20 +170,55 @@ export function getAdjustedSets(baseSets, age) {
 
 /**
  * Determine training status based on e1RM trend
+ * Improved to handle short-term progression without requiring 28-day lookback
+ *
  * @param {number} currentE1RM - Highest e1RM from last 14 days
  * @param {number} previousE1RM - Highest e1RM from 28-42 days ago
  * @param {number} sessionCount - Number of sessions in history
+ * @param {WorkoutEntry[]} recentHistory - Last 3 sessions for short-term analysis
  * @returns {'progressing'|'plateau'|'regressing'|'insufficient_data'}
  */
-export function determineTrainingStatus(currentE1RM, previousE1RM, sessionCount) {
-  if (sessionCount < 3) return 'insufficient_data';
-  if (previousE1RM <= 0) return 'insufficient_data';
+export function determineTrainingStatus(currentE1RM, previousE1RM, sessionCount, recentHistory = []) {
+  // Truly insufficient data - need at least 2 sessions
+  if (sessionCount < 2) return 'insufficient_data';
 
-  const trend = ((currentE1RM - previousE1RM) / previousE1RM) * 100;
+  // If we have long-term data (28-42 days ago), use it for status determination
+  if (previousE1RM > 0) {
+    const trend = ((currentE1RM - previousE1RM) / previousE1RM) * 100;
+    if (trend >= 2.5) return 'progressing';
+    if (trend <= -2.5) return 'regressing';
+    return 'plateau';
+  }
 
-  if (trend >= 2.5) return 'progressing';
-  if (trend <= -2.5) return 'regressing';
-  return 'plateau';
+  // No long-term data, but we have recent sessions - analyze short-term progression
+  if (recentHistory.length >= 2) {
+    const sortedRecent = [...recentHistory]
+      .filter(e => e.isActive !== false)
+      .sort((a, b) => new Date(a.date) - new Date(b.date)); // Chronological order
+
+    if (sortedRecent.length >= 2) {
+      // Get e1RMs for last 2-3 sessions
+      const e1rms = sortedRecent.slice(-3).map(e => calculateE1RM(e.weight, e.reps, e.rir));
+
+      // Check if there's progression in the recent sessions
+      const firstE1RM = e1rms[0];
+      const lastE1RM = e1rms[e1rms.length - 1];
+
+      if (lastE1RM > firstE1RM * 1.01) {
+        // At least 1% improvement in recent sessions
+        return 'progressing';
+      } else if (lastE1RM < firstE1RM * 0.98) {
+        // More than 2% decline
+        return 'regressing';
+      }
+
+      // Stable performance in recent sessions
+      return 'plateau';
+    }
+  }
+
+  // Fallback: not enough data for confident status
+  return 'insufficient_data';
 }
 
 // ============================================================================
@@ -338,6 +378,70 @@ function roundToIncrement(weight) {
   return Math.round(weight / 1.25) * 1.25;
 }
 
+/**
+ * Build detailed reasoning breakdown for recommendation
+ * @param {Object} params
+ * @returns {Object|null}
+ */
+function buildReasoningBreakdown({
+  lastEntry,
+  trainingStatus,
+  prescribedWeight,
+  phaseConfig,
+  exerciseConfig,
+  currentE1RM,
+  previousE1RM
+}) {
+  if (!lastEntry) {
+    return {
+      last_session: 'No previous sessions recorded',
+      trend: 'Starting fresh',
+      next_step: 'Establish a baseline by performing the recommended sets and reps',
+      calculation: 'Starting with conservative estimate based on typical beginner loads'
+    };
+  }
+
+  const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
+  const lastSessionDesc = `${lastEntry.weight}kg × ${lastEntry.reps} reps${lastEntry.rir !== undefined ? ` (RIR ${lastEntry.rir})` : ''}`;
+
+  let trend = '';
+  if (previousE1RM > 0 && currentE1RM > 0) {
+    const trendPercent = ((currentE1RM - previousE1RM) / previousE1RM) * 100;
+    trend = `${trendPercent >= 0 ? '+' : ''}${trendPercent.toFixed(1)}% vs. 4 weeks ago`;
+  } else {
+    trend = trainingStatus === 'progressing' ? 'Improving session-to-session' :
+            trainingStatus === 'plateau' ? 'Stable performance' :
+            trainingStatus === 'regressing' ? 'Declining performance' :
+            'Building training history';
+  }
+
+  let nextStep = '';
+  if (trainingStatus === 'progressing') {
+    if (lastEntry.reps >= phaseConfig.rep_max) {
+      nextStep = `You hit ${phaseConfig.rep_max} reps. Time to increase weight by ${exerciseConfig.load_increment}kg.`;
+    } else {
+      nextStep = `Keep pushing for more reps. Target ${Math.min(lastEntry.reps + 1, phaseConfig.rep_max)} reps this session.`;
+    }
+  } else if (trainingStatus === 'plateau') {
+    nextStep = 'Break through the plateau by focusing on rep quality and progressive volume.';
+  } else if (trainingStatus === 'regressing') {
+    nextStep = 'Take a deload week to recover. Reduce intensity and volume.';
+  } else {
+    nextStep = 'Build momentum with consistent training.';
+  }
+
+  const calculation = prescribedWeight
+    ? `${prescribedWeight}kg = ${lastEntry.weight}kg${prescribedWeight > lastEntry.weight ? ` + ${exerciseConfig.load_increment}kg increment` : ' (maintain weight, add reps)'}`
+    : 'Weight to be determined based on your starting point';
+
+  return {
+    last_session: lastSessionDesc,
+    trend,
+    next_step: nextStep,
+    calculation
+  };
+}
+
 // ============================================================================
 // MAIN RECOMMENDATION FUNCTION
 // ============================================================================
@@ -382,7 +486,16 @@ export function generateRecommendation(request) {
       calculated_e1rm_kg: 0,
       training_status: 'insufficient_data',
       progression_rationale: 'First session. Perform 3×8-10 at RPE 6-7. Record weight for calibration.',
-      flags
+      flags,
+      reasoning_breakdown: buildReasoningBreakdown({
+        lastEntry: null,
+        trainingStatus: 'insufficient_data',
+        prescribedWeight: null,
+        phaseConfig,
+        exerciseConfig,
+        currentE1RM: 0,
+        previousE1RM: 0
+      })
     };
   }
 
@@ -417,6 +530,7 @@ export function generateRecommendation(request) {
     const adjustedWeight = roundToIncrement(reducedE1RM * targetIntensity);
     const adjustedSets = getAdjustedSets(phaseConfig.base_sets, userAge);
 
+    const lastEntry = getMostRecentEntry(activeHistory);
     return {
       exercise,
       prescription: {
@@ -430,7 +544,16 @@ export function generateRecommendation(request) {
       calculated_e1rm_kg: Math.round(workingE1RM * 10) / 10,
       training_status: 'insufficient_data',
       progression_rationale: `${daysSinceLastSession} days since last session. Reducing load by ${Math.round(reductionPercent * 100)}% for safe return.`,
-      flags
+      flags,
+      reasoning_breakdown: buildReasoningBreakdown({
+        lastEntry,
+        trainingStatus: 'insufficient_data',
+        prescribedWeight: adjustedWeight,
+        phaseConfig,
+        exerciseConfig,
+        currentE1RM,
+        previousE1RM
+      })
     };
   }
 
@@ -454,7 +577,7 @@ export function generateRecommendation(request) {
   // =========================================================================
   // Determine training status
   // =========================================================================
-  const trainingStatus = determineTrainingStatus(currentE1RM, previousE1RM, sessionCount);
+  const trainingStatus = determineTrainingStatus(currentE1RM, previousE1RM, sessionCount, activeHistory);
 
   // =========================================================================
   // Calculate base prescription
@@ -540,13 +663,45 @@ export function generateRecommendation(request) {
       calculated_e1rm_kg: Math.round(workingE1RM * 10) / 10,
       training_status: trainingStatus,
       progression_rationale: rationale,
-      flags
+      flags,
+      reasoning_breakdown: buildReasoningBreakdown({
+        lastEntry,
+        trainingStatus,
+        prescribedWeight,
+        phaseConfig,
+        exerciseConfig,
+        currentE1RM,
+        previousE1RM
+      })
     };
   } else if (trainingStatus === 'insufficient_data') {
-    // Prescribe at 60% estimated capacity, mid rep range
-    prescribedWeight = roundToIncrement(workingE1RM * 0.6);
-    flags.push('baseline_establishment_phase');
-    rationale = 'Establishing baseline at conservative load.';
+    // Even with insufficient long-term data, look at last session for progression
+    if (lastEntry && lastWeight > 0) {
+      const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
+      const lastRIR = lastEntry.rir;
+      const rirAtOrBelowTarget = lastRIR === undefined || lastRIR <= phaseConfig.rir_target;
+
+      // Apply progressive overload based on last session
+      if (lastEntry.reps >= phaseConfig.rep_max && rirAtOrBelowTarget) {
+        // Hit top of rep range - increase weight
+        prescribedWeight = roundToIncrement(lastWeight + exerciseConfig.load_increment);
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Increasing weight to ${prescribedWeight}kg.`;
+      } else if (lastEntry.reps >= phaseConfig.rep_min) {
+        // In rep range - aim for +1 rep
+        prescribedWeight = lastWeight;
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Aim for ${Math.min(lastEntry.reps + 1, phaseConfig.rep_max)} reps.`;
+      } else {
+        // Below rep range - consolidate at same weight
+        prescribedWeight = lastWeight;
+        rationale = `Consolidating at ${lastWeight}kg. Target ${phaseConfig.rep_min}-${phaseConfig.rep_max} reps.`;
+      }
+      flags.push('progressive_loading_from_recent_session');
+    } else {
+      // No recent session data - truly establishing baseline
+      prescribedWeight = roundToIncrement(workingE1RM * 0.70); // Increased from 0.60 to 0.70
+      flags.push('baseline_establishment_phase');
+      rationale = 'Establishing baseline. Start conservative and progress from here.';
+    }
   }
 
   // =========================================================================
@@ -566,7 +721,16 @@ export function generateRecommendation(request) {
     calculated_e1rm_kg: Math.round(workingE1RM * 10) / 10,
     training_status: trainingStatus,
     progression_rationale: rationale,
-    flags: flags.length > 0 ? flags : null
+    flags: flags.length > 0 ? flags : null,
+    reasoning_breakdown: buildReasoningBreakdown({
+      lastEntry,
+      trainingStatus,
+      prescribedWeight,
+      phaseConfig,
+      exerciseConfig,
+      currentE1RM,
+      previousE1RM
+    })
   };
 }
 
@@ -629,7 +793,8 @@ export function toLegacyFormat(recommendation) {
     calculated_e1rm_kg: recommendation.calculated_e1rm_kg,
     training_status: recommendation.training_status,
     flags: recommendation.flags,
-    prescription: recommendation.prescription
+    prescription: recommendation.prescription,
+    reasoning_breakdown: recommendation.reasoning_breakdown
   };
 }
 
