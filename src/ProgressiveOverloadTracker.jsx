@@ -1,0 +1,2634 @@
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import {
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  ReferenceLine,
+  YAxis,
+} from 'recharts';
+import {
+  getUser,
+  getEntries,
+  saveEntries,
+  saveUser,
+  resetDemo,
+  getDataMode,
+  toggleDataMode,
+  getCurrentUser,
+  getCurrentEntries,
+  saveCurrentEntries,
+  saveCurrentUser,
+} from './lib/userStore';
+import {
+  getStrengthThresholds,
+  getStrengthLevel,
+} from './lib/strengthStandards';
+import {
+  generateRecommendation,
+  toLegacyFormat,
+  PHASE_CONFIG,
+} from './lib/recommendation-engine';
+
+// Design Tokens - Trade Republic Style
+const COLORS = {
+  bg: '#FFFFFF',
+  bgDark: '#000000',
+  text: '#000000',
+  textMuted: '#6B7280',
+  textLight: '#9CA3AF',
+  accent: '#00C805', // Neon Green for progress
+  negative: '#FF5200', // Neon Orange for regression
+  border: '#E5E7EB',
+};
+
+// Trader Color Logic - 4 distinct states
+const TRADER_COLORS = {
+  UNDERVALUED: {
+    color: '#F2994A',      // Muted Amber
+    bg: 'bg-[#F2994A]/10',
+    text: 'text-[#F2994A]',
+    label: 'UNREALIZED GAINS',
+    description: 'Below target',
+  },
+  MARKET_PERFORM: {
+    color: '#00C805',      // Fintech Green
+    bg: 'bg-[#00C805]/15',
+    text: 'text-[#00C805]',
+    label: 'TARGET MET',
+    description: 'Exact target',
+  },
+  ALPHA: {
+    color: '#00F0FF',      // Electric Cyan
+    bg: 'bg-[#00F0FF]/15',
+    text: 'text-[#00F0FF]',
+    label: 'ALPHA GENERATED',
+    description: 'Above target',
+  },
+  ATH: {
+    color: '#FFD700',      // Gold
+    bg: 'bg-[#FFD700]/20',
+    text: 'text-[#FFD700]',
+    label: 'NEW ATH BREAKOUT',
+    description: 'All-time high',
+  },
+  NEUTRAL: {
+    color: '#9CA3AF',
+    bg: 'bg-gray-100',
+    text: 'text-gray-500',
+    label: '—',
+    description: 'No data',
+  },
+};
+
+// Helper function to determine trader state
+const getTraderState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
+  if (!inputWeight || inputWeight <= 0) return 'NEUTRAL';
+
+  // ATH: Input > All-Time Max
+  if (allTimeMaxWeight && inputWeight > allTimeMaxWeight) {
+    return 'ATH';
+  }
+
+  // Without recommendation, we can only check ATH
+  if (!recommendedWeight) return 'NEUTRAL';
+
+  // ALPHA: Above target but not ATH
+  if (inputWeight > recommendedWeight) {
+    return 'ALPHA';
+  }
+
+  // MARKET_PERFORM: Exact target (within small tolerance)
+  if (Math.abs(inputWeight - recommendedWeight) < 0.1) {
+    return 'MARKET_PERFORM';
+  }
+
+  // UNDERVALUED: Below target
+  return 'UNDERVALUED';
+};
+
+// CountUp Animation Component for Ticker Effect
+const CountUp = ({ value, duration = 800, prefix = '', suffix = '', decimals = 0 }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValue = useRef(value);
+  const animationRef = useRef(null);
+
+  useEffect(() => {
+    const startValue = previousValue.current;
+    const endValue = value;
+    const startTime = performance.now();
+
+    const animate = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Ease out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+
+      const currentValue = startValue + (endValue - startValue) * easeOut;
+      setDisplayValue(currentValue);
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        setDisplayValue(endValue);
+        previousValue.current = endValue;
+      }
+    };
+
+    if (startValue !== endValue) {
+      animationRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  const formatted = decimals > 0
+    ? displayValue.toFixed(decimals)
+    : Math.round(displayValue).toLocaleString();
+
+  return <span>{prefix}{formatted}{suffix}</span>;
+};
+
+// CSS Keyframes injected once
+const injectTraderStyles = () => {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('trader-styles')) return;
+
+  const style = document.createElement('style');
+  style.id = 'trader-styles';
+  style.textContent = `
+    /* Striped/Hashed pattern for UNDERVALUED state */
+    .trader-striped {
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(242, 153, 74, 0.1),
+        rgba(242, 153, 74, 0.1) 4px,
+        rgba(242, 153, 74, 0.2) 4px,
+        rgba(242, 153, 74, 0.2) 8px
+      );
+    }
+
+    /* Ticker number animation */
+    @keyframes tickerFlash {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    .ticker-flash {
+      animation: tickerFlash 0.15s ease-in-out;
+    }
+  `;
+  document.head.appendChild(style);
+};
+
+const COMMON_EXERCISES = [
+  'Squat',
+  'Deadlift',
+  'Bench Press',
+  'Overhead Press',
+  'Barbell Row',
+];
+
+// Muscle group icons (thin outline style)
+const MUSCLE_ICONS = {
+  'Squat': (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 4a2 2 0 100-4 2 2 0 000 4zM8 8h8M6 12l2-4h8l2 4M8 12v8l-2 4M16 12v8l2 4M10 12v8M14 12v8" />
+    </svg>
+  ),
+  'Deadlift': (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="3" r="2" />
+      <path d="M8 7h8M12 7v5M8 12l-4 4v2h4M16 12l4 4v2h-4M12 12v6l-2 4M12 18l2 4" />
+    </svg>
+  ),
+  'Bench Press': (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="10" width="20" height="4" rx="1" />
+      <circle cx="4" cy="12" r="3" />
+      <circle cx="20" cy="12" r="3" />
+      <path d="M12 6v4M10 6h4" />
+    </svg>
+  ),
+  'Overhead Press': (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="4" r="2" />
+      <path d="M12 6v4M8 10h8M4 6h4l2 4M16 10l2-4h4M12 14v6M10 20h4" />
+    </svg>
+  ),
+  'Barbell Row': (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="12" cy="4" r="2" />
+      <path d="M12 6v2M8 8l-4 8M16 8l4 8M4 16h4M16 16h4M12 8v8M10 16h4" />
+    </svg>
+  ),
+};
+
+// Epley formula: 1RM = weight × (1 + reps/30)
+const calculate1RM = (weight, reps) => {
+  if (reps === 1) return weight;
+  return weight * (1 + reps / 30);
+};
+
+// Reverse Epley formulas
+const calculateRepsFor1RM = (targetWeight, target1RM) => {
+  if (targetWeight <= 0 || target1RM <= 0) return null;
+  if (targetWeight >= target1RM) return 1;
+  const reps = 30 * (target1RM / targetWeight - 1);
+  return Math.max(1, Math.min(30, Math.round(reps)));
+};
+
+const calculateWeightFor1RM = (targetReps, target1RM) => {
+  if (targetReps <= 0 || target1RM <= 0) return null;
+  const weight = target1RM / (1 + targetReps / 30);
+  return Math.round(weight * 2) / 2;
+};
+
+const formatDate = (isoString) => {
+  const date = new Date(isoString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const formatDateShort = (isoString) => {
+  const date = new Date(isoString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+};
+
+const generateId = () => Math.random().toString(36).substring(2, 9);
+
+// Sparkline Component - Minimal line chart
+const Sparkline = ({ data, color = COLORS.text, height = 40 }) => {
+  if (!data || data.length < 2) return null;
+
+  return (
+    <div style={{ width: '80px', height: `${height}px` }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={1.5}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// Scroll Number Picker Component
+const ScrollNumberPicker = ({ value, onChange, min = 0, max = 300, step = 2.5, suffix = 'kg', showDecimal = true, recommendedValue = null, compact = false, darkMode = false }) => {
+  const containerRef = useRef(null);
+  const isDragging = useRef(false);
+  const startY = useRef(0);
+  const startValue = useRef(0);
+
+  // Magnetic snap threshold - snap when within 1 step of recommended
+  const snapThreshold = step * 1.5;
+
+  const handleStart = useCallback((clientY) => {
+    isDragging.current = true;
+    startY.current = clientY;
+    startValue.current = value;
+  }, [value]);
+
+  const handleMove = useCallback((clientY) => {
+    if (!isDragging.current) return;
+
+    const diff = startY.current - clientY;
+    const valueChange = Math.round(diff / 10) * step;
+    let newValue = Math.max(min, Math.min(max, startValue.current + valueChange));
+
+    // Round to step
+    let rounded = Math.round(newValue / step) * step;
+
+    // Magnetic snap to recommended value
+    if (recommendedValue !== null && Math.abs(rounded - recommendedValue) <= snapThreshold) {
+      rounded = recommendedValue;
+    }
+
+    if (rounded !== value) {
+      onChange(rounded);
+    }
+  }, [value, onChange, min, max, step, recommendedValue, snapThreshold]);
+
+  const handleEnd = useCallback(() => {
+    isDragging.current = false;
+  }, []);
+
+  // Increment/decrement handlers for arrow clicks
+  const increment = useCallback(() => {
+    let newValue = Math.min(max, value + step);
+    let rounded = Math.round(newValue / step) * step;
+
+    // Magnetic snap to recommended value
+    if (recommendedValue !== null && Math.abs(rounded - recommendedValue) <= snapThreshold) {
+      rounded = recommendedValue;
+    }
+
+    onChange(rounded);
+  }, [value, onChange, max, step, recommendedValue, snapThreshold]);
+
+  const decrement = useCallback(() => {
+    let newValue = Math.max(min, value - step);
+    let rounded = Math.round(newValue / step) * step;
+
+    // Magnetic snap to recommended value
+    if (recommendedValue !== null && Math.abs(rounded - recommendedValue) <= snapThreshold) {
+      rounded = recommendedValue;
+    }
+
+    onChange(rounded);
+  }, [value, onChange, min, step, recommendedValue, snapThreshold]);
+
+  // Touch events
+  const onTouchStart = (e) => handleStart(e.touches[0].clientY);
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    handleMove(e.touches[0].clientY);
+  };
+  const onTouchEnd = () => handleEnd();
+
+  // Mouse events
+  const onMouseDown = (e) => handleStart(e.clientY);
+  const onMouseMove = (e) => {
+    if (isDragging.current) {
+      e.preventDefault();
+      handleMove(e.clientY);
+    }
+  };
+  const onMouseUp = () => handleEnd();
+  const onMouseLeave = () => handleEnd();
+
+  // Format value - show decimal only if showDecimal is true
+  const formatValue = (v) => {
+    if (typeof v !== 'number') return v;
+    return showDecimal ? v.toFixed(1) : Math.round(v).toString();
+  };
+
+  // Calculate min-width based on max value to prevent layout shift
+  const getMinWidth = () => {
+    const maxDigits = Math.max(max, 100).toString().length;
+    if (showDecimal) {
+      return `${maxDigits + 2}ch`; // +2 for decimal point and one decimal place
+    }
+    return `${Math.max(maxDigits, 2)}ch`; // At least 2 chars for reps
+  };
+
+  // Check if current value matches recommended
+  const isRecommendedValue = recommendedValue !== null && Math.abs(value - recommendedValue) < 0.01;
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-col items-center justify-center select-none cursor-ns-resize touch-none"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Up arrow - clickable */}
+      <button
+        onClick={increment}
+        className={`transition-colors ${compact ? 'mb-1 p-1' : 'mb-2 p-2'} ${darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-300 hover:text-gray-500'}`}
+      >
+        <svg className={compact ? "w-5 h-5" : "w-6 h-6"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+
+      {/* Value display - fixed width to prevent jumping, yellow if recommended */}
+      <div className="flex items-baseline justify-center">
+        <span
+          className={`font-extrabold tracking-tight tabular-nums text-center transition-colors ${compact ? 'text-5xl' : 'text-6xl'} ${isRecommendedValue ? 'text-amber-500' : (darkMode ? 'text-white' : 'text-black')}`}
+          style={{ minWidth: getMinWidth() }}
+        >
+          {formatValue(value)}
+        </span>
+        <span className={`font-medium ml-1 ${compact ? 'text-base' : 'text-xl'} ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{suffix}</span>
+      </div>
+
+      {/* Down arrow - clickable */}
+      <button
+        onClick={decrement}
+        className={`transition-colors ${compact ? 'mt-1 p-1' : 'mt-2 p-2'} ${darkMode ? 'text-gray-600 hover:text-gray-400' : 'text-gray-300 hover:text-gray-500'}`}
+      >
+        <svg className={compact ? "w-5 h-5" : "w-6 h-6"} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+    </div>
+  );
+};
+
+// Slide to Log Component (like Robinhood/iPhone unlock)
+const SlideToLog = ({ onComplete, disabled, label = "Log Set", darkMode = false }) => {
+  const containerRef = useRef(null);
+  const [slideX, setSlideX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
+  const startX = useRef(0);
+
+  // Thumb width is dynamic based on label length, approximately 40% of container
+  const getThumbWidth = () => {
+    if (!containerRef.current) return 160;
+    return Math.min(containerRef.current.offsetWidth * 0.45, 200);
+  };
+
+  const getMaxSlide = () => {
+    if (!containerRef.current) return 200;
+    return containerRef.current.offsetWidth - getThumbWidth() - 8;
+  };
+
+  const handleStart = (clientX) => {
+    if (disabled || isComplete) return;
+    setIsDragging(true);
+    startX.current = clientX - slideX;
+  };
+
+  const handleMove = (clientX) => {
+    if (!isDragging || disabled || isComplete) return;
+    const newX = Math.max(0, Math.min(getMaxSlide(), clientX - startX.current));
+    setSlideX(newX);
+  };
+
+  const handleEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const threshold = getMaxSlide() * 0.8;
+    if (slideX >= threshold) {
+      setSlideX(getMaxSlide());
+      setIsComplete(true);
+      setTimeout(() => {
+        onComplete();
+        setSlideX(0);
+        setIsComplete(false);
+      }, 200);
+    } else {
+      setSlideX(0);
+    }
+  };
+
+  const onTouchStart = (e) => handleStart(e.touches[0].clientX);
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    handleMove(e.touches[0].clientX);
+  };
+  const onTouchEnd = () => handleEnd();
+
+  const onMouseDown = (e) => handleStart(e.clientX);
+  const onMouseMove = (e) => {
+    if (isDragging) handleMove(e.clientX);
+  };
+  const onMouseUp = () => handleEnd();
+  const onMouseLeave = () => handleEnd();
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative h-16 rounded-full overflow-hidden select-none ${
+        darkMode ? 'bg-gray-800' : 'bg-gray-100'
+      }`}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Sliding thumb with label inside */}
+      <div
+        className={`absolute top-1 bottom-1 left-1 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
+          !isDragging && slideX === 0 ? 'duration-300' : 'duration-75'
+        } ${disabled ? (darkMode ? 'bg-gray-600' : 'bg-gray-300') : isComplete ? 'bg-[#00C805]' : (darkMode ? 'bg-white' : 'bg-black')}`}
+        style={{
+          transform: `translateX(${slideX}px)`,
+          width: `${getThumbWidth()}px`
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+      >
+        {isComplete ? (
+          <svg className={`w-6 h-6 ${darkMode ? 'text-black' : 'text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <span className={`text-base font-semibold ${disabled ? 'text-gray-400' : (darkMode ? 'text-black' : 'text-white')}`}>
+            {label}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Sheet Modal Component (for exercise picker only)
+const Sheet = ({ isOpen, onClose, children, darkMode = false }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/40 transition-opacity"
+        onClick={onClose}
+      />
+      <div className={`absolute bottom-0 left-0 right-0 rounded-t-3xl overflow-hidden animate-slide-up ${darkMode ? 'bg-gray-900' : 'bg-white'}`} style={{ maxHeight: '70vh' }}>
+        <div className="flex justify-center pt-3 pb-2">
+          <div className={`w-10 h-1 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-gray-300'}`} />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// Swipeable Entry Component for history items
+const SwipeableEntry = ({ children, onEdit, onToggleActive, onDelete, isActive = true, darkMode = false }) => {
+  const containerRef = useRef(null);
+  const [translateX, setTranslateX] = useState(0);
+  const startX = useRef(0);
+  const currentX = useRef(0);
+  const isDragging = useRef(false);
+
+  const ACTION_WIDTH = 180; // Total width of action buttons
+
+  const handleTouchStart = (e) => {
+    startX.current = e.touches[0].clientX;
+    currentX.current = translateX;
+    isDragging.current = true;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging.current) return;
+    const diff = e.touches[0].clientX - startX.current;
+    const newTranslate = Math.min(0, Math.max(-ACTION_WIDTH, currentX.current + diff));
+    setTranslateX(newTranslate);
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    // Snap to open or closed
+    if (translateX < -ACTION_WIDTH / 2) {
+      setTranslateX(-ACTION_WIDTH);
+    } else {
+      setTranslateX(0);
+    }
+  };
+
+  const closeSwipe = () => setTranslateX(0);
+
+  return (
+    <div className="relative overflow-hidden">
+      {/* Action buttons (revealed on swipe) */}
+      <div className="absolute right-0 top-0 bottom-0 flex">
+        <button
+          onClick={() => { onEdit(); closeSwipe(); }}
+          className="w-[60px] h-full bg-blue-500 flex items-center justify-center"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => { onToggleActive(); closeSwipe(); }}
+          className={`w-[60px] h-full flex items-center justify-center ${isActive ? 'bg-gray-400' : 'bg-green-500'}`}
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {isActive ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            )}
+          </svg>
+        </button>
+        <button
+          onClick={() => { onDelete(); closeSwipe(); }}
+          className="w-[60px] h-full bg-[#FF5200] flex items-center justify-center"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Swipeable content */}
+      <div
+        ref={containerRef}
+        className={`relative transition-transform duration-150 ease-out ${darkMode ? 'bg-black' : 'bg-white'}`}
+        style={{ transform: `translateX(${translateX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
+export default function ProgressiveOverloadTracker() {
+  const [entries, setEntries] = useState([]);
+  const [activeTab, setActiveTab] = useState('exercises');
+  const [user, setUser] = useState(null);
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [showLogView, setShowLogView] = useState(false);
+  const [currentSet, setCurrentSet] = useState({ weight: 0, reps: 8 });
+  const [pendingSets, setPendingSets] = useState([]); // Sets added but not yet logged
+  const [editingSetIndex, setEditingSetIndex] = useState(null); // Which pending set is being edited
+  const [setsLoggedCount, setSetsLoggedCount] = useState(0);
+  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [showLevelOverview, setShowLevelOverview] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [dataMode, setDataMode] = useState('demo');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editedUser, setEditedUser] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [editedEntryData, setEditedEntryData] = useState(null);
+  const [selectedChartPoint, setSelectedChartPoint] = useState(null);
+  const [isScrubbingChart, setIsScrubbingChart] = useState(false);
+  const [chartAnimated, setChartAnimated] = useState(false);
+  const chartContainerRef = useRef(null);
+
+  // Reward screen state
+  const [showRewardScreen, setShowRewardScreen] = useState(false);
+  const [rewardData, setRewardData] = useState(null);
+
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('poh-dark-mode');
+      return saved === 'true';
+    }
+    return false;
+  });
+
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(prev => {
+      const newValue = !prev;
+      localStorage.setItem('poh-dark-mode', String(newValue));
+      return newValue;
+    });
+  };
+
+  // Training phase state (hypertrophy, strength, peaking, explosive)
+  const [trainingPhase, setTrainingPhase] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('poh-training-phase');
+      return saved || 'hypertrophy';
+    }
+    return 'hypertrophy';
+  });
+
+  // Update training phase
+  const updateTrainingPhase = (phase) => {
+    setTrainingPhase(phase);
+    localStorage.setItem('poh-training-phase', phase);
+  };
+
+  // Dark mode color classes helper
+  const dm = (lightClass, darkClass) => darkMode ? darkClass : lightClass;
+
+  // Load data on mount
+  useEffect(() => {
+    const mode = getDataMode();
+    setDataMode(mode);
+    setUser(getCurrentUser());
+    setEntries(getCurrentEntries());
+  }, []);
+
+  // Inject trader styles on mount
+  useEffect(() => {
+    injectTraderStyles();
+  }, []);
+
+  // Save entries when they change
+  useEffect(() => {
+    if (entries.length > 0 || dataMode === 'user') {
+      saveCurrentEntries(entries);
+    }
+  }, [entries, dataMode]);
+
+  // Handle data mode toggle
+  const handleToggleDataMode = () => {
+    const newMode = toggleDataMode();
+    setDataMode(newMode);
+    setUser(getCurrentUser());
+    setEntries(getCurrentEntries());
+  };
+
+  // Profile editing handlers
+  const startEditingProfile = useCallback(() => {
+    setEditedUser({ ...user });
+    setEditingProfile(true);
+  }, [user]);
+
+  const cancelEditingProfile = useCallback(() => {
+    setEditedUser(null);
+    setEditingProfile(false);
+  }, []);
+
+  const saveProfileChanges = useCallback(() => {
+    if (editedUser) {
+      saveCurrentUser(editedUser);
+      setUser(editedUser);
+      setEditingProfile(false);
+      setEditedUser(null);
+    }
+  }, [editedUser]);
+
+  const updateEditedUserField = useCallback((field, value) => {
+    setEditedUser(prev => prev ? { ...prev, [field]: value } : null);
+  }, []);
+
+  // Entry management handlers
+  const startEditingEntry = useCallback((entry) => {
+    setEditingEntry(entry.id);
+    setEditedEntryData({ ...entry });
+  }, []);
+
+  const cancelEditingEntry = useCallback(() => {
+    setEditingEntry(null);
+    setEditedEntryData(null);
+  }, []);
+
+  const saveEntryChanges = useCallback(() => {
+    if (editedEntryData) {
+      setEntries(prev => prev.map(e =>
+        e.id === editedEntryData.id ? editedEntryData : e
+      ));
+      setEditingEntry(null);
+      setEditedEntryData(null);
+    }
+  }, [editedEntryData]);
+
+  const updateEditedEntryField = useCallback((field, value) => {
+    setEditedEntryData(prev => prev ? { ...prev, [field]: value } : null);
+  }, []);
+
+  const toggleEntryActive = useCallback((entryId) => {
+    setEntries(prev => prev.map(e =>
+      e.id === entryId ? { ...e, isActive: e.isActive === false ? true : false } : e
+    ));
+  }, []);
+
+  const deleteEntry = useCallback((entryId) => {
+    setEntries(prev => prev.filter(e => e.id !== entryId));
+  }, []);
+
+  // Computed values
+  const exerciseNames = useMemo(() => [...new Set(entries.map((e) => e.name))], [entries]);
+
+  // Only consider active entries for PRs
+  const personalRecords = useMemo(() => {
+    const prs = {};
+    entries.forEach((entry) => {
+      // Skip inactive entries
+      if (entry.isActive === false) return;
+      const oneRM = calculate1RM(entry.weight, entry.reps);
+      if (!prs[entry.name] || oneRM > prs[entry.name].oneRM) {
+        prs[entry.name] = { oneRM, entryId: entry.id, date: entry.date, weight: entry.weight, reps: entry.reps };
+      }
+    });
+    return prs;
+  }, [entries]);
+
+  // Group entries by exercise
+  const groupedEntries = useMemo(() => {
+    const groups = {};
+    entries.forEach((entry) => {
+      if (!groups[entry.name]) {
+        groups[entry.name] = [];
+      }
+      groups[entry.name].push(entry);
+    });
+    Object.keys(groups).forEach((name) => {
+      groups[name].sort((a, b) => new Date(a.date) - new Date(b.date));
+    });
+    return groups;
+  }, [entries]);
+
+  // Get sparkline data for an exercise (highest 1RM per day, last 10 days)
+  const getSparklineData = (exerciseName) => {
+    const exerciseEntries = groupedEntries[exerciseName] || [];
+    // Group by date and get highest 1RM per day
+    const dailyBest = {};
+    exerciseEntries.forEach((e) => {
+      if (e.isActive === false) return;
+      const oneRM = calculate1RM(e.weight, e.reps);
+      if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+        dailyBest[e.date] = oneRM;
+      }
+    });
+    // Sort by date and take last 10
+    const sortedDays = Object.entries(dailyBest)
+      .sort(([a], [b]) => new Date(a) - new Date(b))
+      .slice(-10);
+    return sortedDays.map(([, value]) => ({ value }));
+  };
+
+  // Get performance trend (comparing last two days' highest 1RM)
+  const getPerformanceTrend = (exerciseName) => {
+    const exerciseEntries = groupedEntries[exerciseName] || [];
+    // Group by date and get highest 1RM per day
+    const dailyBest = {};
+    exerciseEntries.forEach((e) => {
+      if (e.isActive === false) return;
+      const oneRM = calculate1RM(e.weight, e.reps);
+      if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+        dailyBest[e.date] = oneRM;
+      }
+    });
+    const sortedDays = Object.entries(dailyBest)
+      .sort(([a], [b]) => new Date(a) - new Date(b));
+    if (sortedDays.length < 2) return 'neutral';
+    const recent = sortedDays.slice(-2);
+    const diff = recent[1][1] - recent[0][1];
+    if (diff > 0) return 'up';
+    if (diff < 0) return 'down';
+    return 'neutral';
+  };
+
+  // Get highest 1RM from the last session date for this exercise
+  const getLastSession1RM = (exerciseName) => {
+    const exerciseEntries = groupedEntries[exerciseName] || [];
+    if (exerciseEntries.length === 0) return null;
+
+    // Get the last date
+    const lastDate = exerciseEntries[exerciseEntries.length - 1].date;
+
+    // Get all entries from that date
+    const lastDayEntries = exerciseEntries.filter(e => e.date === lastDate && e.isActive !== false);
+
+    if (lastDayEntries.length === 0) return null;
+
+    // Find highest 1RM from that day
+    const highest1RM = Math.max(...lastDayEntries.map(e => calculate1RM(e.weight, e.reps)));
+    return Math.round(highest1RM * 10) / 10; // Round to 1 decimal
+  };
+
+  // Get recommendation for exercise using new recommendation engine
+  // Memoized with useCallback to ensure updates when dependencies change
+  const getRecommendation = useCallback((exerciseName) => {
+    if (!exerciseName) return null;
+
+    // Generate recommendation using new engine
+    const recommendation = generateRecommendation({
+      exercise: exerciseName,
+      history: entries, // Pass full history, engine will filter
+      userAge: user?.age || 30,
+      phase: trainingPhase
+    });
+
+    // Convert to legacy format for UI compatibility
+    return toLegacyFormat(recommendation);
+  }, [entries, user?.age, trainingPhase]);
+
+  // Log all sets that have been added to the list
+  const logAllSets = () => {
+    if (!selectedExercise) return;
+    if (pendingSets.length === 0) return;
+
+    const allSets = [...pendingSets];
+
+    // Calculate reward data before logging
+    const totalVolume = allSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+
+    // Find best 1RM from this session
+    const sessionBest1RM = Math.max(...allSets.map(s => calculate1RM(s.weight, s.reps)));
+
+    // Get previous session's best 1RM for this exercise
+    const exerciseHistory = entries
+      .filter(e => e.name === selectedExercise && e.isActive !== false)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const previousBest1RM = exerciseHistory.length > 0
+      ? Math.max(...exerciseHistory.map(e => calculate1RM(e.weight, e.reps)))
+      : 0;
+
+    // Calculate 1RM percentage change
+    const oneRMChange = previousBest1RM > 0
+      ? ((sessionBest1RM - previousBest1RM) / previousBest1RM * 100)
+      : 0;
+
+    // Get current PR for this exercise
+    const currentPR = personalRecords[selectedExercise]?.oneRM || 0;
+
+    // Determine accomplishment type
+    let accomplishmentType = 'on_track'; // default
+    const recommendation = getRecommendation(selectedExercise);
+
+    if (sessionBest1RM > currentPR && currentPR > 0) {
+      accomplishmentType = 'personal_record';
+    } else if (recommendation?.status === 'deload') {
+      accomplishmentType = 'deload';
+    } else if (recommendation?.status === 'double_jump') {
+      accomplishmentType = 'breakthrough';
+    } else if (oneRMChange >= 2) {
+      accomplishmentType = 'progress';
+    } else if (oneRMChange < -5) {
+      accomplishmentType = 'recovery';
+    }
+
+    // Get next session goal using new recommendation engine
+    // Include the sets we just logged in the history for accurate recommendation
+    const updatedHistory = [
+      ...allSets.map(set => ({
+        id: 'pending',
+        name: selectedExercise,
+        date: new Date().toISOString().split('T')[0],
+        weight: set.weight,
+        reps: set.reps,
+        sets: 1,
+      })),
+      ...exerciseHistory
+    ];
+
+    const nextRecommendation = generateRecommendation({
+      exercise: selectedExercise,
+      history: [...entries, ...updatedHistory.filter(e => e.id === 'pending')],
+      userAge: user?.age || 30,
+      phase: trainingPhase
+    });
+    const legacyNextRec = toLegacyFormat(nextRecommendation);
+
+    // Store reward data
+    setRewardData({
+      exerciseName: selectedExercise,
+      accomplishmentType,
+      totalVolume,
+      setsCount: allSets.length,
+      sessionBest1RM,
+      previousBest1RM,
+      oneRMChange,
+      isNewPR: sessionBest1RM > currentPR && currentPR > 0,
+      nextGoal: legacyNextRec?.nextWorkout || null,
+      recommendation: legacyNextRec,
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const newEntries = allSets.map(set => ({
+      id: generateId(),
+      name: selectedExercise,
+      date: today,
+      weight: set.weight,
+      reps: set.reps,
+      sets: 1,
+    }));
+
+    setEntries((prev) => [...prev, ...newEntries]);
+    setSetsLoggedCount(allSets.length);
+    setShowLogView(false);
+    setPendingSets([]);
+    setEditingSetIndex(null);
+
+    // Show reward screen
+    setShowRewardScreen(true);
+  };
+
+  // Add current set to pending and prepare for next set
+  const addSet = () => {
+    if (currentSet.weight <= 0 || currentSet.reps <= 0) return;
+    setPendingSets((prev) => [...prev, { ...currentSet }]);
+    // Keep same weight/reps for convenience
+  };
+
+  // Edit a pending set
+  const editPendingSet = (index) => {
+    setEditingSetIndex(index);
+    setCurrentSet({ ...pendingSets[index] });
+  };
+
+  // Save edited pending set
+  const saveEditedSet = () => {
+    if (editingSetIndex !== null) {
+      setPendingSets((prev) => prev.map((set, i) =>
+        i === editingSetIndex ? { ...currentSet } : set
+      ));
+      setEditingSetIndex(null);
+      // Reset to last values for new set
+      const lastSet = pendingSets[pendingSets.length - 1] || currentSet;
+      setCurrentSet({ ...lastSet });
+    }
+  };
+
+  // Cancel editing pending set
+  const cancelEditSet = () => {
+    if (editingSetIndex !== null) {
+      const lastSet = pendingSets[pendingSets.length - 1] || { weight: 20, reps: 8 };
+      setCurrentSet({ ...lastSet });
+      setEditingSetIndex(null);
+    }
+  };
+
+  // Remove a pending set
+  const removePendingSet = (index) => {
+    setPendingSets((prev) => prev.filter((_, i) => i !== index));
+    if (editingSetIndex === index) {
+      setEditingSetIndex(null);
+    }
+  };
+
+  // Open log view with initial values from recommendation
+  const openLogView = (exerciseName) => {
+    setSelectedExercise(exerciseName);
+    const recommendation = getRecommendation(exerciseName);
+    if (recommendation) {
+      setCurrentSet({
+        weight: recommendation.nextWorkout.weight,
+        reps: recommendation.nextWorkout.targetReps,
+      });
+    } else {
+      const lastWeight = getLastWeight(exerciseName);
+      setCurrentSet({
+        weight: lastWeight || 20,
+        reps: 8,
+      });
+    }
+    setPendingSets([]);
+    setEditingSetIndex(null);
+    setSetsLoggedCount(0);
+    setShowLogView(true);
+  };
+
+  // Exercise List View (Stock Watchlist Style)
+  const ExerciseListView = () => {
+    const allExercises = [...new Set([...COMMON_EXERCISES, ...exerciseNames])];
+
+    return (
+      <div className={`min-h-screen ${dm('bg-white', 'bg-black')}`}>
+        {/* Header */}
+        <div className="px-6 pt-12 pb-8">
+          <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Portfolio</span>
+          <h1 className={`text-4xl font-extrabold mt-1 ${dm('text-black', 'text-white')}`}>Your Lifts</h1>
+        </div>
+
+        {/* Exercise List */}
+        <div className="px-6">
+          {allExercises.map((exercise) => {
+            const lastSession1RM = getLastSession1RM(exercise);
+            const trend = getPerformanceTrend(exercise);
+            const sparkData = getSparklineData(exercise);
+            const isPR = personalRecords[exercise];
+            const trendColor = trend === 'up' ? COLORS.accent : trend === 'down' ? COLORS.negative : (darkMode ? '#FFFFFF' : COLORS.text);
+
+            return (
+              <button
+                key={exercise}
+                onClick={() => {
+                  setSelectedExercise(exercise);
+                  setActiveTab('detail');
+                }}
+                className={`w-full flex items-center py-5 border-b last:border-0 ${dm('border-gray-100', 'border-gray-800')}`}
+              >
+                {/* Icon */}
+                <div className={`w-10 h-10 flex items-center justify-center ${dm('text-gray-400', 'text-gray-500')}`}>
+                  {MUSCLE_ICONS[exercise] || MUSCLE_ICONS['Squat']}
+                </div>
+
+                {/* Name & PR indicator */}
+                <div className="flex-1 ml-4 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold ${dm('text-black', 'text-white')}`}>{exercise}</span>
+                    {isPR && (
+                      <span className="w-2 h-2 rounded-full bg-[#00C805]" />
+                    )}
+                  </div>
+                  {lastSession1RM && (
+                    <span className={`text-xs ${dm('text-gray-400', 'text-gray-500')}`}>Est. 1RM</span>
+                  )}
+                </div>
+
+                {/* Sparkline */}
+                <div className="mx-4">
+                  {sparkData.length > 1 && (
+                    <Sparkline data={sparkData} color={trendColor} />
+                  )}
+                </div>
+
+                {/* 1RM from last session */}
+                <div className="text-right min-w-[60px]">
+                  {lastSession1RM ? (
+                    <>
+                      <span className="text-lg font-bold" style={{ color: trendColor }}>
+                        {lastSession1RM}
+                      </span>
+                      <span className="text-sm text-gray-400 ml-0.5">kg</span>
+                    </>
+                  ) : (
+                    <span className="text-gray-300">-</span>
+                  )}
+                </div>
+
+                {/* Chevron */}
+                <svg className={`w-5 h-5 ml-2 ${dm('text-gray-300', 'text-gray-600')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* FAB to Log */}
+        <button
+          onClick={() => setShowExercisePicker(true)}
+          className={`fixed bottom-24 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${dm('bg-black', 'bg-white')}`}
+        >
+          <svg className={`w-7 h-7 ${dm('text-white', 'text-black')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+
+        {/* Exercise Picker Sheet */}
+        <Sheet isOpen={showExercisePicker} onClose={() => setShowExercisePicker(false)} darkMode={darkMode}>
+          <div className={`p-6 ${dm('bg-white', 'bg-gray-900')}`}>
+            <h2 className={`text-xl font-bold mb-6 ${dm('text-black', 'text-white')}`}>Select Exercise</h2>
+            <div className="space-y-1">
+              {allExercises.map((exercise) => (
+                <button
+                  key={exercise}
+                  onClick={() => {
+                    setShowExercisePicker(false);
+                    openLogView(exercise);
+                  }}
+                  className={`w-full flex items-center py-4 px-4 rounded-2xl transition-colors ${dm('hover:bg-gray-50', 'hover:bg-gray-800')}`}
+                >
+                  <div className={`w-8 h-8 flex items-center justify-center ${dm('text-gray-400', 'text-gray-500')}`}>
+                    {MUSCLE_ICONS[exercise] || MUSCLE_ICONS['Squat']}
+                  </div>
+                  <span className={`ml-4 font-medium ${dm('text-black', 'text-white')}`}>{exercise}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Sheet>
+      </div>
+    );
+  };
+
+  // Exercise Detail View
+  const ExerciseDetailView = () => {
+    if (!selectedExercise) return null;
+
+    const exerciseEntries = (groupedEntries[selectedExercise] || []).slice().reverse();
+    const pr = personalRecords[selectedExercise];
+    const recommendation = getRecommendation(selectedExercise);
+    // Only include active entries in chart, using highest 1RM per day
+    const chartData = (() => {
+      const activeEntries = exerciseEntries.filter((e) => e.isActive !== false);
+      const dailyBest = {};
+      activeEntries.forEach((e) => {
+        const oneRM = calculate1RM(e.weight, e.reps);
+        if (!dailyBest[e.date] || oneRM > dailyBest[e.date]) {
+          dailyBest[e.date] = oneRM;
+        }
+      });
+      return Object.entries(dailyBest)
+        .sort(([a], [b]) => new Date(a) - new Date(b))
+        .map(([date, value]) => ({ date, value }));
+    })();
+
+    // Calculate strength level using user's profile data
+    const strengthThresholds = user ? getStrengthThresholds(
+      selectedExercise,
+      user.sex || 'male',
+      user.bodyweight || 75,
+      user.age || 30
+    ) : null;
+    const strengthLevel = pr && strengthThresholds ? getStrengthLevel(pr.oneRM, strengthThresholds) : null;
+
+    // Calculate weight needed for next level and current level threshold
+    const getLevelThresholds = () => {
+      if (!strengthThresholds || !strengthLevel) return null;
+      const levels = ['beginner', 'intermediate', 'advanced', 'professional'];
+      const levelColors = {
+        beginner: '#22c55e',      // Green
+        intermediate: '#3b82f6',  // Blue
+        advanced: '#a855f7',      // Purple
+        professional: '#f59e0b',  // Amber
+      };
+      const currentIndex = levels.indexOf(strengthLevel);
+
+      // Current level's lower threshold (where this level starts)
+      const currentLevelThreshold = currentIndex === 0 ? 0 : strengthThresholds[strengthLevel];
+      const currentLevelColor = levelColors[strengthLevel];
+
+      // Next level threshold
+      const isMax = currentIndex === levels.length - 1;
+      const nextLevel = isMax ? null : levels[currentIndex + 1];
+      const nextThreshold = isMax ? null : strengthThresholds[nextLevel];
+      const nextLevelColor = isMax ? null : levelColors[nextLevel];
+
+      // Weight needed for next level
+      const weightNeeded = pr && nextThreshold ? Math.round((nextThreshold - pr.oneRM) * 10) / 10 : null;
+
+      return {
+        currentLevel: strengthLevel,
+        currentLevelThreshold,
+        currentLevelColor,
+        nextLevel,
+        nextThreshold,
+        nextLevelColor,
+        weightNeeded,
+        isMax,
+      };
+    };
+    const levelThresholds = getLevelThresholds();
+    const nextLevelInfo = levelThresholds ? {
+      nextLevel: levelThresholds.nextLevel,
+      weightNeeded: levelThresholds.weightNeeded,
+      nextThreshold: levelThresholds.nextThreshold,
+      isMax: levelThresholds.isMax,
+    } : null;
+
+    // Handle chart scrubbing - find data point from x position
+    const getDataPointFromX = (clientX) => {
+      if (!chartContainerRef.current || chartData.length === 0) return null;
+      const rect = chartContainerRef.current.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const chartWidth = rect.width - 20; // Account for margins
+      const xOffset = 10; // Left margin
+      const normalizedX = Math.max(0, Math.min(1, (x - xOffset) / chartWidth));
+      const index = Math.round(normalizedX * (chartData.length - 1));
+      return chartData[Math.max(0, Math.min(chartData.length - 1, index))];
+    };
+
+    const handleChartTouchStart = (e) => {
+      e.preventDefault();
+      setIsScrubbingChart(true);
+      const touch = e.touches[0];
+      const point = getDataPointFromX(touch.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartTouchMove = (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const point = getDataPointFromX(touch.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartTouchEnd = () => {
+      setIsScrubbingChart(false);
+    };
+
+    const handleChartMouseDown = (e) => {
+      setIsScrubbingChart(true);
+      const point = getDataPointFromX(e.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartMouseMove = (e) => {
+      if (!isScrubbingChart) return;
+      const point = getDataPointFromX(e.clientX);
+      if (point) setSelectedChartPoint(point);
+    };
+
+    const handleChartMouseUp = () => {
+      setIsScrubbingChart(false);
+    };
+
+    const handleChartMouseLeave = () => {
+      setIsScrubbingChart(false);
+    };
+
+    // Mark animation as complete after first render
+    const handleAnimationEnd = () => {
+      setChartAnimated(true);
+    };
+
+    // Level Overview Modal
+    if (showLevelOverview && strengthThresholds) {
+      const levels = [
+        { key: 'beginner', name: 'Beginner', color: 'bg-green-500', textColor: 'text-green-600', range: `0 - ${strengthThresholds.intermediate - 1}kg` },
+        { key: 'intermediate', name: 'Intermediate', color: 'bg-blue-500', textColor: 'text-blue-600', range: `${strengthThresholds.intermediate} - ${strengthThresholds.advanced - 1}kg` },
+        { key: 'advanced', name: 'Advanced', color: 'bg-purple-500', textColor: 'text-purple-600', range: `${strengthThresholds.advanced} - ${strengthThresholds.professional - 1}kg` },
+        { key: 'professional', name: 'Professional', color: 'bg-amber-400', textColor: 'text-amber-600', range: `${strengthThresholds.professional}kg+` },
+      ];
+
+      const currentOneRM = pr?.oneRM || 0;
+
+      return (
+        <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-6 pt-12 pb-4 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+            <button
+              onClick={() => setShowLevelOverview(false)}
+              className={dm('text-gray-400', 'text-gray-500')}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <h1 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>Strength Levels</h1>
+            <div className="w-6" />
+          </div>
+
+          {/* Exercise & Current Stats */}
+          <div className={`px-6 py-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
+            <h2 className={`text-2xl font-bold ${dm('text-black', 'text-white')}`}>{selectedExercise}</h2>
+            <p className={dm('text-gray-500', 'text-gray-400')}>Based on your profile: {user?.bodyweight || 75}kg, {user?.age || 30}y, {user?.sex || 'male'}</p>
+            {pr && (
+              <div className="mt-4 flex items-baseline gap-2">
+                <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{Math.round(currentOneRM)}kg</span>
+                <span className={dm('text-gray-400', 'text-gray-500')}>estimated 1RM</span>
+              </div>
+            )}
+          </div>
+
+          {/* Levels List */}
+          <div className="flex-1 px-6 py-6 overflow-y-auto">
+            <div className="space-y-3">
+              {levels.map((level, index) => {
+                const isCurrentLevel = strengthLevel === level.key;
+                const isPastLevel = levels.findIndex(l => l.key === strengthLevel) > index;
+                const threshold = strengthThresholds[level.key];
+
+                // Calculate progress within this level
+                let progressPercent = 0;
+                if (isCurrentLevel && currentOneRM > 0) {
+                  const lowerBound = index === 0 ? 0 : strengthThresholds[levels[index - 1].key];
+                  const upperBound = threshold;
+                  progressPercent = Math.min(100, Math.max(0, ((currentOneRM - lowerBound) / (upperBound - lowerBound)) * 100));
+                }
+
+                return (
+                  <div
+                    key={level.key}
+                    className={`p-4 rounded-2xl border-2 transition-all ${
+                      isCurrentLevel
+                        ? dm('border-black bg-white shadow-lg', 'border-white bg-gray-900 shadow-lg')
+                        : isPastLevel
+                        ? dm('border-gray-200 bg-gray-50', 'border-gray-700 bg-gray-800')
+                        : dm('border-gray-100 bg-white', 'border-gray-800 bg-gray-900')
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full ${level.color} ${isPastLevel ? 'opacity-50' : ''}`} />
+                        <div>
+                          <span className={`font-bold ${isCurrentLevel ? dm('text-black', 'text-white') : isPastLevel ? 'text-gray-400' : dm('text-gray-600', 'text-gray-300')}`}>
+                            {level.name}
+                          </span>
+                          {isCurrentLevel && (
+                            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}>
+                              Current
+                            </span>
+                          )}
+                          {isPastLevel && (
+                            <span className="ml-2 text-xs text-gray-400">
+                              ✓ Achieved
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-semibold ${isCurrentLevel ? level.textColor : 'text-gray-400'}`}>
+                          {level.range}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress bar for current level */}
+                    {isCurrentLevel && (
+                      <div className="mt-3">
+                        <div className={`h-2 rounded-full overflow-hidden ${dm('bg-gray-100', 'bg-gray-700')}`}>
+                          <div
+                            className={`h-full ${level.color} transition-all duration-500`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                        <div className={`flex justify-between mt-2 text-xs ${dm('text-gray-400', 'text-gray-500')}`}>
+                          <span>{Math.round(currentOneRM)}kg</span>
+                          <span>{threshold}kg</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Multiplier Info */}
+            <div className={`mt-8 p-4 rounded-2xl ${dm('bg-gray-50', 'bg-gray-900')}`}>
+              <h3 className={`text-sm font-semibold uppercase tracking-wider mb-2 ${dm('text-gray-600', 'text-gray-400')}`}>How levels are calculated</h3>
+              <p className={`text-sm leading-relaxed ${dm('text-gray-500', 'text-gray-400')}`}>
+                Strength levels are based on your estimated 1 rep max (1RM) relative to your bodyweight, adjusted for age.
+                These standards help you track your progress compared to typical lifters at each experience level.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`min-h-screen ${dm('bg-white', 'bg-black')}`}>
+        {/* Header */}
+        <div className="px-6 pt-12 pb-4">
+          <button
+            onClick={() => {
+              setSelectedChartPoint(null);
+              setChartAnimated(false);
+              setActiveTab('exercises');
+            }}
+            className={`flex items-center mb-4 ${dm('text-gray-400', 'text-gray-500')}`}
+          >
+            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm">Back</span>
+          </button>
+          <div className="flex items-center gap-3">
+            <h1 className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{selectedExercise}</h1>
+            {strengthLevel && (
+              <button
+                onClick={() => setShowLevelOverview(true)}
+                className={`px-3 py-1 text-xs font-bold rounded-full uppercase transition-transform active:scale-95 ${
+                  strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
+                  strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
+                  strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
+                  'bg-green-500 text-white'
+                }`}
+              >
+                {strengthLevel}
+              </button>
+            )}
+          </div>
+          {nextLevelInfo && !nextLevelInfo.isMax && (
+            <p className={`text-sm mt-2 ${dm('text-gray-400', 'text-gray-500')}`}>
+              <span className={`font-semibold ${dm('text-black', 'text-white')}`}>+{nextLevelInfo.weightNeeded}kg</span> to reach{' '}
+              <span className={`font-semibold ${
+                nextLevelInfo.nextLevel === 'professional' ? 'text-amber-500' :
+                nextLevelInfo.nextLevel === 'advanced' ? 'text-purple-500' :
+                nextLevelInfo.nextLevel === 'intermediate' ? 'text-blue-500' :
+                'text-green-500'
+              }`}>{nextLevelInfo.nextLevel}</span>
+            </p>
+          )}
+          {nextLevelInfo?.isMax && (
+            <p className="text-sm text-amber-500 mt-2 font-medium">
+              You've reached the highest level!
+            </p>
+          )}
+        </div>
+
+        {/* 1. Progress Chart */}
+        {chartData.length > 1 && (
+          <div className="px-6 py-6">
+            <div className="flex items-center justify-between mb-4">
+              <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Progress</span>
+              {/* Show selected point info inline only while scrubbing */}
+              {isScrubbingChart && selectedChartPoint && (
+                <div className="flex items-center gap-3">
+                  <span className={`text-lg font-bold ${dm('text-black', 'text-white')}`}>
+                    {Math.round(selectedChartPoint.value * 10) / 10}kg
+                  </span>
+                  <span className={dm('text-gray-400', 'text-gray-500')}>{formatDateShort(selectedChartPoint.date)}</span>
+                </div>
+              )}
+            </div>
+            <div
+              ref={chartContainerRef}
+              className="h-48 touch-none select-none cursor-crosshair relative"
+              onTouchStart={handleChartTouchStart}
+              onTouchMove={handleChartTouchMove}
+              onTouchEnd={handleChartTouchEnd}
+              onMouseDown={handleChartMouseDown}
+              onMouseMove={handleChartMouseMove}
+              onMouseUp={handleChartMouseUp}
+              onMouseLeave={handleChartMouseLeave}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                >
+                  <YAxis domain={['auto', 'auto']} hide />
+                  {/* Current level threshold line */}
+                  {levelThresholds && levelThresholds.currentLevelThreshold > 0 && (
+                    <ReferenceLine
+                      y={levelThresholds.currentLevelThreshold}
+                      stroke={levelThresholds.currentLevelColor}
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  {/* Next level threshold line */}
+                  {levelThresholds && levelThresholds.nextThreshold && (
+                    <ReferenceLine
+                      y={levelThresholds.nextThreshold}
+                      stroke={levelThresholds.nextLevelColor}
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke={darkMode ? '#FFFFFF' : '#000000'}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={false}
+                    isAnimationActive={!chartAnimated}
+                    animationDuration={800}
+                    onAnimationEnd={handleAnimationEnd}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              {/* Custom overlay for scrub indicator */}
+              {isScrubbingChart && selectedChartPoint && (
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: `${10 + ((chartData.findIndex(d => d.date === selectedChartPoint.date) / (chartData.length - 1)) * (100 - 5.5))}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    backgroundColor: darkMode ? '#FFF' : '#000',
+                  }}
+                >
+                  <div
+                    className={`absolute w-4 h-4 rounded-full border-2 ${dm('bg-black border-white', 'bg-white border-black')}`}
+                    style={{
+                      left: -7,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            {/* Scrub hint */}
+            <p className={`text-center text-xs mt-2 ${dm('text-gray-300', 'text-gray-600')}`}>Drag to explore</p>
+            {/* Level threshold legend */}
+            {levelThresholds && (
+              <div className="flex items-center justify-center gap-6 mt-3">
+                {levelThresholds.currentLevelThreshold > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: levelThresholds.currentLevelColor }} />
+                    <span className={`text-xs capitalize ${dm('text-gray-500', 'text-gray-400')}`}>{levelThresholds.currentLevel}</span>
+                  </div>
+                )}
+                {levelThresholds.nextThreshold && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-0.5 border-t-2 border-dashed" style={{ borderColor: levelThresholds.nextLevelColor }} />
+                    <span className={`text-xs capitalize ${dm('text-gray-500', 'text-gray-400')}`}>{levelThresholds.nextLevel}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. Recommendation */}
+        {recommendation && (
+          <div className={`mx-6 p-5 rounded-3xl mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
+            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Next Session</span>
+            <div className="flex items-baseline mt-2">
+              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                {recommendation.nextWorkout.weight}
+              </span>
+              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+              <span className={dm('mx-3 text-gray-300', 'mx-3 text-gray-600')}>×</span>
+              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                {recommendation.nextWorkout.targetReps}
+              </span>
+              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
+            </div>
+            <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+            <button
+              onClick={() => openLogView(selectedExercise)}
+              className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
+            >
+              Start Now
+            </button>
+          </div>
+        )}
+
+        {/* 3. Personal Record */}
+        {pr && (
+          <div className="px-6 py-6">
+            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Personal Record</span>
+            <div className="flex items-baseline mt-2">
+              <span className={`text-5xl font-extrabold tracking-tight ${dm('text-black', 'text-white')}`}>
+                {Math.round(pr.oneRM * 10) / 10}
+              </span>
+              <span className={`text-xl font-medium ml-2 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+              <span className="ml-3 px-3 py-1 bg-[#00C805] text-white text-xs font-bold rounded-full uppercase">
+                1RM
+              </span>
+            </div>
+            <p className={`text-sm mt-2 ${dm('text-gray-400', 'text-gray-500')}`}>
+              {pr.weight}kg × {pr.reps} reps on {formatDateShort(pr.date)}
+            </p>
+          </div>
+        )}
+
+        {/* 4. History - Collapsible with swipe actions */}
+        <div className="pb-8">
+          <div className="px-6">
+            <button
+              onClick={() => setHistoryExpanded(!historyExpanded)}
+              className="w-full flex items-center justify-between py-3"
+            >
+              <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>
+                History ({exerciseEntries.length})
+              </span>
+              <svg
+                className={`w-5 h-5 transition-transform ${historyExpanded ? 'rotate-180' : ''} ${dm('text-gray-400', 'text-gray-500')}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <p className={`text-xs -mt-1 mb-2 ${dm('text-gray-300', 'text-gray-600')}`}>Swipe left on entry for options</p>
+          </div>
+
+          {historyExpanded && (
+            <div className="mt-2">
+              {exerciseEntries.map((entry) => {
+                const oneRM = calculate1RM(entry.weight, entry.reps);
+                const isPR = pr?.entryId === entry.id && entry.isActive !== false;
+                const isInactive = entry.isActive === false;
+
+                return (
+                  <SwipeableEntry
+                    key={entry.id}
+                    onEdit={() => startEditingEntry(entry)}
+                    onToggleActive={() => toggleEntryActive(entry.id)}
+                    onDelete={() => deleteEntry(entry.id)}
+                    isActive={!isInactive}
+                    darkMode={darkMode}
+                  >
+                    <div className={`flex items-center justify-between py-3 px-6 ${isInactive ? 'opacity-40' : ''}`}>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-semibold ${isInactive ? 'text-gray-400 line-through' : dm('text-black', 'text-white')}`}>
+                            {entry.weight}kg × {entry.reps}
+                          </span>
+                          {isPR && (
+                            <span className="px-2 py-0.5 bg-[#00C805] text-white text-[10px] font-bold rounded-full">
+                              PR
+                            </span>
+                          )}
+                          {isInactive && (
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${dm('bg-gray-300 text-gray-600', 'bg-gray-700 text-gray-400')}`}>
+                              EXCLUDED
+                            </span>
+                          )}
+                        </div>
+                        <span className={dm('text-sm text-gray-400', 'text-sm text-gray-500')}>{formatDate(entry.date)}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-lg font-bold ${isInactive ? 'text-gray-400' : dm('text-black', 'text-white')}`}>
+                          {Math.round(oneRM * 10) / 10}
+                        </span>
+                        <span className={`text-sm ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>1RM</span>
+                      </div>
+                    </div>
+                  </SwipeableEntry>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Profile display user (for non-editing mode)
+  const profileDisplayUser = user;
+
+  // Get current recommendation for log view - memoized to update on dependency changes
+  const currentRecommendation = useMemo(() => {
+    return selectedExercise ? getRecommendation(selectedExercise) : null;
+  }, [selectedExercise, getRecommendation]);
+
+  // Handlers for log view
+  const handleWeightChange = (v) => setCurrentSet((prev) => ({ ...prev, weight: v }));
+  const handleRepsChange = (v) => setCurrentSet((prev) => ({ ...prev, reps: v }));
+  const handleCloseLogView = () => {
+    setShowLogView(false);
+    setCurrentSet({ weight: 0, reps: 8 });
+    setPendingSets([]);
+    setEditingSetIndex(null);
+    setSetsLoggedCount(0);
+  };
+
+  // Fullscreen Edit Entry View
+  if (editingEntry && editedEntryData) {
+    return (
+      <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-12 pb-4">
+          <button
+            onClick={cancelEditingEntry}
+            className={dm('text-gray-400', 'text-gray-500')}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>Edit Entry</h1>
+          <button
+            onClick={saveEntryChanges}
+            className="text-[#00C805] font-semibold"
+          >
+            Save
+          </button>
+        </div>
+
+        <div className="flex-1 px-6 py-4 space-y-6">
+          {/* Weight */}
+          <div>
+            <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Weight (kg)</label>
+            <input
+              type="number"
+              value={editedEntryData.weight || ''}
+              onChange={(e) => updateEditedEntryField('weight', parseFloat(e.target.value) || 0)}
+              step="0.5"
+              className={`w-full mt-2 px-4 py-4 text-2xl font-bold rounded-xl border-0 focus:ring-2 outline-none ${
+                dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+              }`}
+            />
+          </div>
+
+          {/* Reps */}
+          <div>
+            <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Reps</label>
+            <input
+              type="number"
+              value={editedEntryData.reps || ''}
+              onChange={(e) => updateEditedEntryField('reps', parseInt(e.target.value) || 0)}
+              className={`w-full mt-2 px-4 py-4 text-2xl font-bold rounded-xl border-0 focus:ring-2 outline-none ${
+                dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+              }`}
+            />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Date</label>
+            <input
+              type="date"
+              value={editedEntryData.date || ''}
+              onChange={(e) => updateEditedEntryField('date', e.target.value)}
+              className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
+                dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+              }`}
+            />
+          </div>
+
+          {/* Calculated 1RM */}
+          <div className={`pt-4 border-t ${dm('border-gray-100', 'border-gray-800')}`}>
+            <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Calculated 1RM</span>
+            <div className="flex items-baseline mt-2">
+              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                {Math.round(calculate1RM(editedEntryData.weight, editedEntryData.reps) * 10) / 10}
+              </span>
+              <span className={`text-lg ml-2 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Delete button at bottom */}
+        <div className="px-6 pb-8">
+          <button
+            onClick={() => {
+              deleteEntry(editedEntryData.id);
+              cancelEditingEntry();
+            }}
+            className="w-full py-4 text-[#FF5200] font-medium"
+          >
+            Delete Entry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Ref for sets scroll container
+  const setsScrollRef = useRef(null);
+
+  // Scroll to bottom of sets list when a new set is added
+  useEffect(() => {
+    if (setsScrollRef.current && pendingSets.length > 0) {
+      setsScrollRef.current.scrollTop = setsScrollRef.current.scrollHeight;
+    }
+  }, [pendingSets.length]);
+
+  // Fullscreen Log View - Single screen with inline editing
+  if (showLogView) {
+    // Only count sets that have been added to the list (not picker values)
+    const totalSets = pendingSets.length;
+    const isEditing = editingSetIndex !== null;
+
+    // Calculate Gap indicator values
+    const currentOneRM = currentSet.weight > 0 && currentSet.reps > 0
+      ? calculate1RM(currentSet.weight, currentSet.reps)
+      : 0;
+    const prOneRM = selectedExercise && personalRecords[selectedExercise]
+      ? personalRecords[selectedExercise].oneRM
+      : 0;
+    const recommendedOneRM = currentRecommendation?.nextWorkout
+      ? calculate1RM(currentRecommendation.nextWorkout.weight, currentRecommendation.nextWorkout.targetReps)
+      : 0;
+
+    // Calculate gap percentage based on 1RM vs recommended 1RM
+    const gapPercent = recommendedOneRM > 0 ? ((currentOneRM - recommendedOneRM) / recommendedOneRM * 100) : 0;
+    const isZeroGap = recommendedOneRM > 0 && currentOneRM > 0 && Math.abs(gapPercent) < 0.05;
+
+    // Helper to calculate gap for a specific set (vs recommended 1RM)
+    const getSetGap = (set) => {
+      const setOneRM = calculate1RM(set.weight, set.reps);
+      if (recommendedOneRM <= 0) return null;
+      return ((setOneRM - recommendedOneRM) / recommendedOneRM * 100);
+    };
+
+    // Check if weight and reps match recommendation
+    const recommendedWeight = currentRecommendation?.nextWorkout?.weight;
+    const recommendedReps = currentRecommendation?.nextWorkout?.targetReps;
+    const isWeightRecommended = recommendedWeight && Math.abs(currentSet.weight - recommendedWeight) < 0.01;
+    const isRepsRecommended = recommendedReps && currentSet.reps === recommendedReps;
+
+    // Calculate total volume for ticker display - only logged sets count
+    const totalVolume = pendingSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+
+    // Get All-Time High (max weight ever lifted for this exercise)
+    const allTimeMaxWeight = personalRecords[selectedExercise]?.weight || 0;
+
+    // Determine Trader State based on current input
+    const traderState = getTraderState(currentSet.weight, recommendedWeight, allTimeMaxWeight);
+    const traderConfig = TRADER_COLORS[traderState];
+
+    // Helper to get trader state for a specific set
+    const getSetTraderState = (set) => {
+      return getTraderState(set.weight, recommendedWeight, allTimeMaxWeight);
+    };
+
+    return (
+      <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
+        {/* Header with Total Volume Ticker */}
+        <div className="flex items-center justify-between px-6 pt-12 pb-2 flex-shrink-0">
+          <button
+            onClick={handleCloseLogView}
+            className={dm('text-gray-400', 'text-gray-500')}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="text-center">
+            <h1 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>{selectedExercise}</h1>
+            {totalVolume > 0 && (
+              <div className={`text-xs uppercase tracking-wider mt-0.5 ${dm('text-gray-400', 'text-gray-500')}`}>
+                Vol: <span className={`font-semibold tabular-nums ${dm('text-black', 'text-white')}`}>
+                  <CountUp value={totalVolume} duration={800} suffix=" kg" />
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="w-6" />
+        </div>
+
+        {/* Comprehensive Recommendation - shown when no sets logged yet */}
+        {pendingSets.length === 0 && currentRecommendation && !isEditing && (
+          <div className="px-6 py-6 flex-1 flex flex-col justify-center">
+            <div className="text-center">
+              <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>
+                Recommendation
+              </span>
+              <div className="mt-4 flex items-center justify-center gap-6">
+                <div className="text-center">
+                  <span className="text-5xl font-extrabold text-amber-500">
+                    {recommendedWeight?.toFixed(1) || '—'}
+                  </span>
+                  <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+                </div>
+                <span className={dm('text-gray-300', 'text-gray-600')}>×</span>
+                <div className="text-center">
+                  <span className="text-5xl font-extrabold text-amber-500">
+                    {recommendedReps || '—'}
+                  </span>
+                  <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
+                </div>
+              </div>
+              <div className="mt-6 mx-auto max-w-xs">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <span className={`w-2 h-2 rounded-full ${
+                    currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
+                    currentRecommendation.status === 'maintain' ? 'bg-amber-400' :
+                    currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
+                    currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
+                    'bg-gray-400'
+                  }`} />
+                  <span className={`text-sm uppercase tracking-[0.1em] font-medium ${dm('text-gray-500', 'text-gray-400')}`}>
+                    {currentRecommendation.status === 'progress' && 'Progress'}
+                    {currentRecommendation.status === 'maintain' && 'Build Reps'}
+                    {currentRecommendation.status === 'deload' && 'Deload Week'}
+                    {currentRecommendation.status === 'double_jump' && 'Double Jump'}
+                    {currentRecommendation.status === 'struggle' && 'Keep Pushing'}
+                  </span>
+                </div>
+                <p className={`text-sm leading-relaxed ${dm('text-gray-500', 'text-gray-400')}`}>
+                  {currentRecommendation.message}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending sets list - scrollable */}
+        {pendingSets.length > 0 && (
+          <div
+            ref={setsScrollRef}
+            className="px-6 pt-2 flex-1 overflow-y-auto"
+          >
+            <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>
+              Sets ({pendingSets.length})
+            </span>
+            <div className="mt-2 space-y-1 pb-4">
+              {pendingSets.map((set, index) => {
+                const setGap = getSetGap(set);
+                const setTraderState = getSetTraderState(set);
+                const setTraderConfig = TRADER_COLORS[setTraderState];
+                return (
+                  <div
+                    key={index}
+                    className={`flex items-center justify-between py-2 ${
+                      editingSetIndex === index ? (dm('bg-black text-white', 'bg-white text-black') + ' px-3 rounded-xl -mx-3') : ''
+                    }`}
+                  >
+                    <button
+                      onClick={() => editingSetIndex === index ? cancelEditSet() : editPendingSet(index)}
+                      className="flex-1 text-left flex items-center"
+                    >
+                      <span className={`font-semibold ${editingSetIndex === index ? (dm('text-white', 'text-black')) : dm('text-black', 'text-white')}`}>
+                        Set {index + 1}:
+                      </span>
+                      <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-400' : dm('text-gray-500', 'text-gray-400')}`}>
+                        {set.weight}kg × {set.reps} reps
+                      </span>
+                      {/* Trader state badge for this set - percentage only */}
+                      {setGap !== null && (
+                        <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
+                          setTraderState === 'ATH' ? 'bg-[#FFD700]/20 text-[#FFD700]' :
+                          setTraderState === 'ALPHA' ? 'bg-[#00F0FF]/15 text-[#00F0FF]' :
+                          setTraderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15 text-[#00C805]' :
+                          setTraderState === 'UNDERVALUED' ? 'bg-[#F2994A]/15 text-[#F2994A]' :
+                          dm('bg-gray-100 text-gray-500', 'bg-gray-800 text-gray-400')
+                        }`}>
+                          {Math.abs(setGap) < 0.05 ? '0.0%' : (
+                            <>
+                              {setGap > 0 ? '▲+' : '▼'}{setGap > 0 ? '' : ''}{setGap.toFixed(1)}%
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => removePendingSet(index)}
+                      className={dm('text-gray-400', 'text-gray-500')}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* No recommendation placeholder when no sets */}
+        {pendingSets.length === 0 && !currentRecommendation && (
+          <div className="flex-1" />
+        )}
+
+        {/* Compact recommendation shown above gap indicator when sets exist */}
+        {pendingSets.length > 0 && currentRecommendation && (
+          <div className="px-6 pb-2 flex-shrink-0">
+            <div className={`flex items-center justify-center gap-2 text-sm ${dm('text-gray-400', 'text-gray-500')}`}>
+              <span>Recommended:</span>
+              <span className="font-semibold text-amber-500">{recommendedWeight?.toFixed(1)}kg × {recommendedReps} reps</span>
+            </div>
+          </div>
+        )}
+
+        {/* Trader State Indicator + Add Set Row - Equal width buttons */}
+        <div className="px-6 pb-4 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Trader State Indicator - percentage only with trader colors */}
+            <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
+              traderState === 'ATH' ? 'bg-[#FFD700]/20' :
+              traderState === 'ALPHA' ? 'bg-[#00F0FF]/15' :
+              traderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15' :
+              traderState === 'UNDERVALUED' ? 'trader-striped' :
+              (darkMode ? 'bg-gray-800' : 'bg-gray-100')
+            }`}>
+              {currentSet.weight > 0 && currentOneRM > 0 ? (
+                <span className={`text-lg font-bold ${
+                  traderState === 'ATH' ? 'text-[#FFD700]' :
+                  traderState === 'ALPHA' ? 'text-[#00F0FF]' :
+                  traderState === 'MARKET_PERFORM' ? 'text-[#00C805]' :
+                  traderState === 'UNDERVALUED' ? 'text-[#F2994A]' :
+                  (darkMode ? 'text-gray-400' : 'text-gray-500')
+                }`}>
+                  {isZeroGap ? '0.0%' : (
+                    <>
+                      {gapPercent > 0 ? '▲' : '▼'} {gapPercent > 0 ? '+' : ''}{gapPercent.toFixed(1)}%
+                    </>
+                  )}
+                </span>
+              ) : (
+                <span className={`text-base font-semibold ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+              )}
+            </div>
+
+            {/* Add Set Button - flex-1 for equal width */}
+            {!isEditing && (
+              <button
+                onClick={addSet}
+                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                className={`flex-1 h-16 flex items-center justify-center border-2 text-base font-semibold rounded-full disabled:opacity-30 disabled:cursor-not-allowed ${
+                  darkMode ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                + Add Set
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Current set label */}
+        <div className="px-6 pb-1 flex-shrink-0">
+          <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>
+            {isEditing ? `Editing Set ${editingSetIndex + 1}` : pendingSets.length > 0 ? `Set ${pendingSets.length + 1}` : 'Set 1'}
+          </span>
+        </div>
+
+        {/* Compact weight and reps pickers */}
+        <div className="flex flex-row px-6 py-2 items-center justify-center flex-shrink-0 gap-8">
+          <ScrollNumberPicker
+            value={currentSet.weight}
+            onChange={handleWeightChange}
+            min={0}
+            max={500}
+            step={2.5}
+            suffix="kg"
+            showDecimal={true}
+            recommendedValue={currentRecommendation?.nextWorkout?.weight ?? null}
+            compact={true}
+            darkMode={darkMode}
+          />
+          <ScrollNumberPicker
+            value={currentSet.reps}
+            onChange={handleRepsChange}
+            min={1}
+            max={50}
+            step={1}
+            suffix="reps"
+            showDecimal={false}
+            recommendedValue={currentRecommendation?.nextWorkout?.targetReps ?? null}
+            compact={true}
+            darkMode={darkMode}
+          />
+        </div>
+
+        {/* Action area - fixed at bottom */}
+        <div className="px-6 pt-3 pb-8 flex-shrink-0">
+          {isEditing ? (
+            // Editing mode buttons
+            <div className="flex gap-3">
+              <button
+                onClick={cancelEditSet}
+                className={`flex-1 h-14 border-2 text-lg font-semibold rounded-full ${
+                  darkMode ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditedSet}
+                disabled={currentSet.weight <= 0 || currentSet.reps <= 0}
+                className={`flex-1 h-14 text-lg font-semibold rounded-full disabled:opacity-30 ${
+                  darkMode ? 'bg-white text-black' : 'bg-black text-white'
+                }`}
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            // Slide to log
+            <SlideToLog
+              onComplete={logAllSets}
+              disabled={totalSets === 0}
+              label={`Log ${totalSets > 0 ? `${totalSets} Set${totalSets > 1 ? 's' : ''}` : 'Set'}`}
+              darkMode={darkMode}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Reward Screen - Swiss Style / Neo-Brutalism
+  if (showRewardScreen && rewardData) {
+    // Determine if performance is positive or negative
+    const isPositive = rewardData.oneRMChange >= 0;
+    const accentColor = isPositive ? '#00C805' : '#FF5200';
+    const isNewPR = rewardData.isNewPR;
+
+    // Generate mini sparkline data from session
+    const sparklinePoints = rewardData.previousBest1RM > 0
+      ? [
+          { x: 0, y: rewardData.previousBest1RM },
+          { x: 1, y: rewardData.sessionBest1RM }
+        ]
+      : [{ x: 0, y: rewardData.sessionBest1RM }];
+
+    // SVG sparkline path
+    const sparklinePath = sparklinePoints.length > 1
+      ? `M 0 ${100 - (sparklinePoints[0].y / Math.max(...sparklinePoints.map(p => p.y)) * 80)} L 100 ${100 - (sparklinePoints[1].y / Math.max(...sparklinePoints.map(p => p.y)) * 80)}`
+      : '';
+
+    return (
+      <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
+        {/* Upper Section - Hero Performance Display */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          {/* Exercise Label */}
+          <span className={`text-xs uppercase tracking-[0.25em] font-medium mb-8 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+            {rewardData.exerciseName}
+          </span>
+
+          {/* Hero 1RM Value */}
+          <div className="text-center mb-4">
+            <span className={`text-7xl font-extrabold tracking-tight ${dm('text-black', 'text-white')}`}>
+              {rewardData.sessionBest1RM.toFixed(1)}
+            </span>
+            <span className={`text-2xl font-medium ml-2 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+          </div>
+
+          {/* Performance Change - Stock Style */}
+          <div className="flex items-center gap-3 mb-8">
+            {rewardData.previousBest1RM > 0 ? (
+              <>
+                <span className={`text-4xl font-extrabold`} style={{ color: accentColor }}>
+                  {isPositive ? '+' : ''}{rewardData.oneRMChange.toFixed(1)}%
+                </span>
+                {/* Mini Trend Arrow */}
+                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                  {isPositive ? (
+                    <path d="M4 16l8-8 8 8" stroke={accentColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  ) : (
+                    <path d="M4 8l8 8 8-8" stroke={accentColor} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </svg>
+              </>
+            ) : (
+              <span className={`text-2xl font-extrabold ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>FIRST SESSION</span>
+            )}
+          </div>
+
+          {/* Status Badge */}
+          {isNewPR && (
+            <div className="px-6 py-2 rounded-full bg-[#00C805]/10">
+              <span className="text-sm font-bold uppercase tracking-[0.2em] text-[#00C805]">
+                New All-Time High
+              </span>
+            </div>
+          )}
+
+          {/* Sparkline */}
+          {sparklinePoints.length > 1 && (
+            <div className="mt-8 w-32 h-16">
+              <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
+                <path
+                  d={sparklinePath}
+                  stroke={accentColor}
+                  strokeWidth="3"
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Lower Section - Stats Summary */}
+        <div className="px-6 pb-8">
+          {/* Stats Grid - No borders, whitespace separation */}
+          <div className={`rounded-3xl p-6 mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
+            <div className="grid grid-cols-2 gap-6">
+              {/* Volume */}
+              <div>
+                <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                  Volume
+                </span>
+                <div className="mt-1">
+                  <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                    {rewardData.totalVolume.toLocaleString()}
+                  </span>
+                  <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+                </div>
+              </div>
+
+              {/* Sets */}
+              <div>
+                <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                  Sets
+                </span>
+                <div className="mt-1">
+                  <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                    {rewardData.setsCount}
+                  </span>
+                </div>
+              </div>
+
+              {/* Previous 1RM */}
+              {rewardData.previousBest1RM > 0 && (
+                <div>
+                  <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                    Previous 1RM
+                  </span>
+                  <div className="mt-1">
+                    <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                      {rewardData.previousBest1RM.toFixed(1)}
+                    </span>
+                    <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Target */}
+              {rewardData.nextGoal && (
+                <div>
+                  <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                    Next Target
+                  </span>
+                  <div className="mt-1">
+                    <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                      {rewardData.nextGoal.weight}
+                    </span>
+                    <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg × {rewardData.nextGoal.targetReps}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Continue Button - Pill Shape */}
+          <button
+            onClick={() => {
+              setShowRewardScreen(false);
+              setRewardData(null);
+            }}
+            className={`w-full h-14 text-base font-semibold rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen pb-20 ${dm('bg-white text-black', 'bg-black text-white')}`}>
+      {/* Main Content */}
+      {activeTab === 'exercises' && <ExerciseListView />}
+      {activeTab === 'detail' && <ExerciseDetailView />}
+
+      {/* Profile View - Inline to prevent re-renders */}
+      {activeTab === 'profile' && (
+        <div className={`min-h-screen pb-24 ${dm('bg-white', 'bg-black')}`}>
+          <div className="px-6 pt-12 pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Settings</span>
+                <h1 className={`text-4xl font-extrabold mt-1 ${dm('text-black', 'text-white')}`}>Profile</h1>
+              </div>
+              {!editingProfile ? (
+                <button
+                  onClick={startEditingProfile}
+                  className={`px-4 py-2 text-sm font-medium rounded-full border ${dm('text-black border-gray-200', 'text-white border-gray-700')}`}
+                >
+                  Edit
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={cancelEditingProfile}
+                    className={`px-4 py-2 text-sm font-medium ${dm('text-gray-500', 'text-gray-400')}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveProfileChanges}
+                    className={`px-4 py-2 text-sm font-medium rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(editingProfile ? editedUser : profileDisplayUser) && (
+            <div className="px-6">
+              {/* Avatar & Name */}
+              <div className={`pb-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <div className="flex items-center mb-6">
+                  <img
+                    src={(editingProfile ? editedUser : profileDisplayUser)?.avatar}
+                    alt={(editingProfile ? editedUser : profileDisplayUser)?.name}
+                    className="w-16 h-16 rounded-full object-cover"
+                  />
+                  {!editingProfile && (
+                    <div className="ml-4">
+                      <h2 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.name}</h2>
+                      <p className={dm('text-gray-400', 'text-gray-500')}>{profileDisplayUser?.email || 'No email'}</p>
+                    </div>
+                  )}
+                </div>
+
+                {editingProfile && editedUser && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Name</label>
+                      <input
+                        type="text"
+                        value={editedUser.name || ''}
+                        onChange={(e) => updateEditedUserField('name', e.target.value)}
+                        className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')}`}
+                        placeholder="Your name"
+                      />
+                    </div>
+                    <div>
+                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Email</label>
+                      <input
+                        type="email"
+                        value={editedUser.email || ''}
+                        onChange={(e) => updateEditedUserField('email', e.target.value)}
+                        className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')}`}
+                        placeholder="your@email.com"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Body Stats */}
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Body Stats</span>
+
+                {!editingProfile ? (
+                  <div className="grid grid-cols-3 gap-6 mt-4">
+                    <div>
+                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.bodyweight}</span>
+                      <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Weight</p>
+                    </div>
+                    <div>
+                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.age}</span>
+                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Age</p>
+                    </div>
+                    <div>
+                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.sex === 'male' ? 'M' : 'F'}</span>
+                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Sex</p>
+                    </div>
+                  </div>
+                ) : editedUser && (
+                  <div className="space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Weight (kg)</label>
+                        <input
+                          type="number"
+                          value={editedUser.bodyweight || ''}
+                          onChange={(e) => updateEditedUserField('bodyweight', parseInt(e.target.value) || 0)}
+                          className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
+                            dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+                          }`}
+                          placeholder="75"
+                        />
+                      </div>
+                      <div>
+                        <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Age</label>
+                        <input
+                          type="number"
+                          value={editedUser.age || ''}
+                          onChange={(e) => updateEditedUserField('age', parseInt(e.target.value) || 0)}
+                          className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
+                            dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+                          }`}
+                          placeholder="30"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Sex</label>
+                      <div className="flex gap-3 mt-2">
+                        <button
+                          onClick={() => updateEditedUserField('sex', 'male')}
+                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                            editedUser.sex === 'male'
+                              ? dm('bg-black text-white', 'bg-white text-black')
+                              : dm('bg-gray-50 text-gray-500', 'bg-gray-800 text-gray-400')
+                          }`}
+                        >
+                          Male
+                        </button>
+                        <button
+                          onClick={() => updateEditedUserField('sex', 'female')}
+                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                            editedUser.sex === 'female'
+                              ? dm('bg-black text-white', 'bg-white text-black')
+                              : dm('bg-gray-50 text-gray-500', 'bg-gray-800 text-gray-400')
+                          }`}
+                        >
+                          Female
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Workout Stats - Read only */}
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Activity</span>
+                <div className="grid grid-cols-2 gap-6 mt-4">
+                  <div>
+                    <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{entries.length}</span>
+                    <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Total Sets</p>
+                  </div>
+                  <div>
+                    <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{Object.keys(personalRecords).length}</span>
+                    <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>PRs Set</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Appearance */}
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Appearance</span>
+                <button
+                  onClick={toggleDarkMode}
+                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl ${dm('bg-gray-50', 'bg-gray-800')}`}
+                >
+                  <div className="text-left flex items-center gap-3">
+                    {darkMode ? (
+                      <svg className="w-5 h-5 text-[#00C805]" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    )}
+                    <div>
+                      <span className={`font-semibold ${dm('text-black', 'text-white')}`}>
+                        {darkMode ? 'Dark Mode' : 'Light Mode'}
+                      </span>
+                      <p className={`text-sm mt-0.5 ${dm('text-gray-400', 'text-gray-500')}`}>
+                        {darkMode ? 'Easy on the eyes' : 'Classic bright theme'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
+                    darkMode ? 'bg-[#00C805]' : 'bg-gray-300'
+                  }`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      darkMode ? 'translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </div>
+                </button>
+              </div>
+
+              {/* Training Phase */}
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Training Phase</span>
+                <p className={`text-sm mt-1 mb-4 ${dm('text-gray-400', 'text-gray-500')}`}>
+                  Adjusts rep ranges, intensity, and rest times
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(PHASE_CONFIG).map(([phase, config]) => (
+                    <button
+                      key={phase}
+                      onClick={() => updateTrainingPhase(phase)}
+                      className={`py-3 px-4 rounded-xl font-medium text-sm capitalize transition-colors ${
+                        trainingPhase === phase
+                          ? dm('bg-black text-white', 'bg-white text-black')
+                          : dm('bg-gray-50 text-gray-600', 'bg-gray-800 text-gray-400')
+                      }`}
+                    >
+                      <span className="block">{phase}</span>
+                      <span className={`text-xs ${trainingPhase === phase ? 'opacity-75' : dm('text-gray-400', 'text-gray-500')}`}>
+                        {config.rep_range} reps
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Data Mode Toggle */}
+              <div className="py-6">
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Data Source</span>
+                <button
+                  onClick={handleToggleDataMode}
+                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl ${dm('bg-gray-50', 'bg-gray-800')}`}
+                >
+                  <div className="text-left">
+                    <span className={`font-semibold ${dm('text-black', 'text-white')}`}>
+                      {dataMode === 'demo' ? 'Demo Data' : 'Your Data'}
+                    </span>
+                    <p className={`text-sm mt-0.5 ${dm('text-gray-400', 'text-gray-500')}`}>
+                      {dataMode === 'demo' ? 'Using generated sample data' : 'Using your logged workouts'}
+                    </p>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
+                    dataMode === 'user' ? 'bg-[#00C805]' : 'bg-gray-300'
+                  }`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      dataMode === 'user' ? 'translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </div>
+                </button>
+              </div>
+
+              {/* Reset Demo (only shown in demo mode) */}
+              {dataMode === 'demo' && (
+                <button
+                  onClick={resetDemo}
+                  className="w-full py-4 text-[#FF5200] font-medium"
+                >
+                  Reset Demo Data
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bottom Navigation - Minimal */}
+      {activeTab !== 'detail' && (
+        <nav className={`fixed bottom-0 left-0 right-0 border-t ${dm('bg-white border-gray-100', 'bg-black border-gray-800')}`}>
+          <div className="max-w-[600px] mx-auto flex">
+            <button
+              onClick={() => setActiveTab('exercises')}
+              className={`flex-1 py-5 flex flex-col items-center gap-1 ${
+                activeTab === 'exercises' ? dm('text-black', 'text-white') : dm('text-gray-300', 'text-gray-600')
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={activeTab === 'exercises' ? 2 : 1.5} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span className="text-[10px] uppercase tracking-wider font-medium">Lifts</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`flex-1 py-5 flex flex-col items-center gap-1 ${
+                activeTab === 'profile' ? dm('text-black', 'text-white') : dm('text-gray-300', 'text-gray-600')
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={activeTab === 'profile' ? 2 : 1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="text-[10px] uppercase tracking-wider font-medium">Profile</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {/* CSS for animations */}
+      <style>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
+    </div>
+  );
+}
