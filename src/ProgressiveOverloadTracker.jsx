@@ -29,52 +29,64 @@ import {
   PHASE_CONFIG,
 } from './lib/recommendation-engine';
 
-// Design Tokens - Trade Republic Style
+// Design Tokens - Trade Republic Style (Radical Minimalism)
 const COLORS = {
-  bg: '#FFFFFF',
-  bgDark: '#000000',
-  text: '#000000',
-  textMuted: '#6B7280',
-  textLight: '#9CA3AF',
-  accent: '#00C805', // Neon Green for progress
-  negative: '#FF5200', // Neon Orange for regression
-  border: '#E5E7EB',
+  // Backgrounds
+  bg: '#FFFFFF',           // Pure white (light mode)
+  bgDark: '#000000',       // Pure black (dark mode)
+  bgSubtle: '#F9F9F9',     // Subtle off-white for cards
+  bgSubtleDark: '#121212', // Dark charcoal for cards
+
+  // Typography
+  text: '#000000',         // Primary text (light mode)
+  textDark: '#FFFFFF',     // Primary text (dark mode)
+  textMuted: '#8E8E93',    // Medium gray for secondary text
+  textLight: '#C7C7CC',    // Light gray for tertiary
+
+  // Functional colors
+  accent: '#00C805',       // Neon green for growth/positive
+  negative: '#FF3B30',     // Vivid red for loss/negative
+  trophy: '#FFCC00',       // Golden yellow for rewards/milestones
+
+  // Borders
+  border: '#E5E5EA',       // Light mode borders
+  borderDark: '#1C1C1E',   // Dark mode borders
 };
 
-// Trader Color Logic - 4 distinct states
+// Trader Color Logic - 4 distinct states (Trade Republic inspired)
 const TRADER_COLORS = {
   UNDERVALUED: {
-    color: '#F2994A',      // Muted Amber
-    bg: 'bg-[#F2994A]/10',
-    text: 'text-[#F2994A]',
-    label: 'UNREALIZED GAINS',
+    color: '#FF9500',      // Orange - below target
+    bg: 'bg-[#FF9500]/10',
+    text: 'text-[#FF9500]',
+    label: 'BELOW TARGET',
     description: 'Below target',
   },
   MARKET_PERFORM: {
-    color: '#00C805',      // Fintech Green
-    bg: 'bg-[#00C805]/15',
+    color: '#00C805',      // Neon green - target met
+    bg: 'bg-[#00C805]/10',
     text: 'text-[#00C805]',
     label: 'TARGET MET',
     description: 'Exact target',
   },
   ALPHA: {
-    color: '#00F0FF',      // Electric Cyan
-    bg: 'bg-[#00F0FF]/15',
-    text: 'text-[#00F0FF]',
-    label: 'ALPHA GENERATED',
+    color: '#00C805',      // Same green - above target (still positive)
+    bg: 'bg-[#00C805]/15',
+    text: 'text-[#00C805]',
+    label: 'ABOVE TARGET',
     description: 'Above target',
   },
   ATH: {
-    color: '#FFD700',      // Gold
-    bg: 'bg-[#FFD700]/20',
-    text: 'text-[#FFD700]',
-    label: 'NEW ATH BREAKOUT',
+    color: '#FFCC00',      // Trophy gold - all-time high
+    bg: 'bg-[#FFCC00]/15',
+    text: 'text-[#FFCC00]',
+    label: 'NEW ATH',
     description: 'All-time high',
   },
   NEUTRAL: {
-    color: '#9CA3AF',
-    bg: 'bg-gray-100',
-    text: 'text-gray-500',
+    color: '#8E8E93',      // Muted gray
+    bg: 'bg-zinc-100 dark:bg-zinc-800',
+    text: 'text-zinc-500',
     label: '—',
     description: 'No data',
   },
@@ -161,26 +173,34 @@ const injectTraderStyles = () => {
   const style = document.createElement('style');
   style.id = 'trader-styles';
   style.textContent = `
-    /* Striped/Hashed pattern for UNDERVALUED state */
+    /* Striped pattern for UNDERVALUED state - Trade Republic style */
     .trader-striped {
       background: repeating-linear-gradient(
         -45deg,
-        rgba(242, 153, 74, 0.1),
-        rgba(242, 153, 74, 0.1) 4px,
-        rgba(242, 153, 74, 0.2) 4px,
-        rgba(242, 153, 74, 0.2) 8px
+        rgba(255, 149, 0, 0.08),
+        rgba(255, 149, 0, 0.08) 4px,
+        rgba(255, 149, 0, 0.15) 4px,
+        rgba(255, 149, 0, 0.15) 8px
       );
     }
 
-    /* Ticker number animation */
+    /* Ticker number animation - subtle flash */
     @keyframes tickerFlash {
       0% { opacity: 1; }
-      50% { opacity: 0.6; }
+      50% { opacity: 0.7; }
       100% { opacity: 1; }
     }
 
     .ticker-flash {
       animation: tickerFlash 0.15s ease-in-out;
+    }
+
+    /* Trade Republic card hover effect */
+    .tr-card-hover {
+      transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+    }
+    .tr-card-hover:active {
+      transform: scale(0.98);
     }
   `;
   document.head.appendChild(style);
@@ -532,19 +552,22 @@ const SlideToLog = ({ onComplete, disabled, label = "Log Set", darkMode = false 
   );
 };
 
-// Sheet Modal Component (for exercise picker only)
+// Sheet Modal Component - Trade Republic style bottom sheet
 const Sheet = ({ isOpen, onClose, children, darkMode = false }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50">
+      {/* Backdrop - subtle darkness */}
       <div
-        className="absolute inset-0 bg-black/40 transition-opacity"
+        className="absolute inset-0 bg-black/50 transition-opacity backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className={`absolute bottom-0 left-0 right-0 rounded-t-3xl overflow-hidden animate-slide-up ${darkMode ? 'bg-gray-900' : 'bg-white'}`} style={{ maxHeight: '70vh' }}>
+      {/* Sheet - Large radius, clean */}
+      <div className={`absolute bottom-0 left-0 right-0 rounded-t-3xl overflow-hidden animate-slide-up ${darkMode ? 'bg-black' : 'bg-white'}`} style={{ maxHeight: '70vh' }}>
+        {/* Handle - Minimal */}
         <div className="flex justify-center pt-3 pb-2">
-          <div className={`w-10 h-1 rounded-full ${darkMode ? 'bg-gray-700' : 'bg-gray-300'}`} />
+          <div className={`w-10 h-1 rounded-full ${darkMode ? 'bg-zinc-700' : 'bg-zinc-300'}`} />
         </div>
         {children}
       </div>
@@ -613,7 +636,7 @@ const SwipeableEntry = ({ children, onEdit, onToggleActive, onDelete, isActive =
         </button>
         <button
           onClick={() => { onDelete(); closeSwipe(); }}
-          className="w-[60px] h-full bg-[#FF5200] flex items-center justify-center"
+          className="w-[60px] h-full bg-[#FF3B30] flex items-center justify-center"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1061,19 +1084,19 @@ export default function ProgressiveOverloadTracker() {
     setShowLogView(true);
   };
 
-  // Exercise List View (Stock Watchlist Style)
+  // Exercise List View (Stock Watchlist Style - Trade Republic)
   const ExerciseListView = () => {
     const allExercises = [...new Set([...COMMON_EXERCISES, ...exerciseNames])];
 
     return (
       <div className={`min-h-screen ${dm('bg-white', 'bg-black')}`}>
-        {/* Header */}
-        <div className="px-6 pt-12 pb-8">
-          <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Portfolio</span>
-          <h1 className={`text-4xl font-extrabold mt-1 ${dm('text-black', 'text-white')}`}>Your Lifts</h1>
+        {/* Header - Clean with extensive whitespace */}
+        <div className="px-6 pt-14 pb-10">
+          <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Portfolio</span>
+          <h1 className={`text-4xl font-black tracking-tight mt-2 ${dm('text-black', 'text-white')}`}>Your Lifts</h1>
         </div>
 
-        {/* Exercise List */}
+        {/* Exercise List - Clean rows with high separation */}
         <div className="px-6">
           {allExercises.map((exercise) => {
             const lastSession1RM = getLastSession1RM(exercise);
@@ -1089,10 +1112,10 @@ export default function ProgressiveOverloadTracker() {
                   setSelectedExercise(exercise);
                   setActiveTab('detail');
                 }}
-                className={`w-full flex items-center py-5 border-b last:border-0 ${dm('border-gray-100', 'border-gray-800')}`}
+                className={`w-full flex items-center py-5 border-b last:border-0 tr-card-hover ${dm('border-zinc-100', 'border-zinc-800/50')}`}
               >
-                {/* Icon */}
-                <div className={`w-10 h-10 flex items-center justify-center ${dm('text-gray-400', 'text-gray-500')}`}>
+                {/* Icon - Thin stroke style */}
+                <div className={`w-10 h-10 flex items-center justify-center ${dm('text-zinc-400', 'text-zinc-500')}`}>
                   {MUSCLE_ICONS[exercise] || MUSCLE_ICONS['Squat']}
                 </div>
 
@@ -1101,57 +1124,57 @@ export default function ProgressiveOverloadTracker() {
                   <div className="flex items-center gap-2">
                     <span className={`font-semibold ${dm('text-black', 'text-white')}`}>{exercise}</span>
                     {isPR && (
-                      <span className="w-2 h-2 rounded-full bg-[#00C805]" />
+                      <span className="w-2 h-2 rounded-full bg-positive" />
                     )}
                   </div>
                   {lastSession1RM && (
-                    <span className={`text-xs ${dm('text-gray-400', 'text-gray-500')}`}>Est. 1RM</span>
+                    <span className={`text-xs ${dm('text-muted', 'text-zinc-500')}`}>Est. 1RM</span>
                   )}
                 </div>
 
-                {/* Sparkline */}
+                {/* Sparkline - Minimal */}
                 <div className="mx-4">
                   {sparkData.length > 1 && (
                     <Sparkline data={sparkData} color={trendColor} />
                   )}
                 </div>
 
-                {/* 1RM from last session */}
+                {/* 1RM from last session - Bold value */}
                 <div className="text-right min-w-[60px]">
                   {lastSession1RM ? (
                     <>
-                      <span className="text-lg font-bold" style={{ color: trendColor }}>
+                      <span className="text-lg font-bold tabular-nums" style={{ color: trendColor }}>
                         {lastSession1RM}
                       </span>
-                      <span className="text-sm text-gray-400 ml-0.5">kg</span>
+                      <span className={`text-sm ml-0.5 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
                     </>
                   ) : (
-                    <span className="text-gray-300">-</span>
+                    <span className={dm('text-zinc-300', 'text-zinc-600')}>—</span>
                   )}
                 </div>
 
-                {/* Chevron */}
-                <svg className={`w-5 h-5 ml-2 ${dm('text-gray-300', 'text-gray-600')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                {/* Chevron - Subtle */}
+                <svg className={`w-5 h-5 ml-2 ${dm('text-zinc-300', 'text-zinc-600')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
             );
           })}
         </div>
 
-        {/* FAB to Log */}
+        {/* FAB to Log - Pure black/white, no shadow for TR style */}
         <button
           onClick={() => setShowExercisePicker(true)}
-          className={`fixed bottom-24 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${dm('bg-black', 'bg-white')}`}
+          className={`fixed bottom-24 right-6 w-14 h-14 rounded-full flex items-center justify-center transition-transform active:scale-95 ${dm('bg-black', 'bg-white')}`}
         >
           <svg className={`w-7 h-7 ${dm('text-white', 'text-black')}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
         </button>
 
-        {/* Exercise Picker Sheet */}
+        {/* Exercise Picker Sheet - Clean rounded corners */}
         <Sheet isOpen={showExercisePicker} onClose={() => setShowExercisePicker(false)} darkMode={darkMode}>
-          <div className={`p-6 ${dm('bg-white', 'bg-gray-900')}`}>
+          <div className={`p-6 ${dm('bg-white', 'bg-black')}`}>
             <h2 className={`text-xl font-bold mb-6 ${dm('text-black', 'text-white')}`}>Select Exercise</h2>
             <div className="space-y-1">
               {allExercises.map((exercise) => (
@@ -1161,9 +1184,9 @@ export default function ProgressiveOverloadTracker() {
                     setShowExercisePicker(false);
                     openLogView(exercise);
                   }}
-                  className={`w-full flex items-center py-4 px-4 rounded-2xl transition-colors ${dm('hover:bg-gray-50', 'hover:bg-gray-800')}`}
+                  className={`w-full flex items-center py-4 px-4 rounded-2xl transition-colors tr-card-hover ${dm('hover:bg-zinc-50 active:bg-zinc-100', 'hover:bg-zinc-900 active:bg-zinc-800')}`}
                 >
-                  <div className={`w-8 h-8 flex items-center justify-center ${dm('text-gray-400', 'text-gray-500')}`}>
+                  <div className={`w-8 h-8 flex items-center justify-center ${dm('text-zinc-400', 'text-zinc-500')}`}>
                     {MUSCLE_ICONS[exercise] || MUSCLE_ICONS['Squat']}
                   </div>
                   <span className={`ml-4 font-medium ${dm('text-black', 'text-white')}`}>{exercise}</span>
@@ -1591,45 +1614,45 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* 2. Recommendation */}
+        {/* 2. Recommendation - Clean card with large radius */}
         {recommendation && (
-          <div className={`mx-6 p-5 rounded-3xl mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
-            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Next Session</span>
-            <div className="flex items-baseline mt-2">
-              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+          <div className={`mx-6 p-6 rounded-3xl mb-6 ${dm('bg-zinc-50', 'bg-zinc-900')}`}>
+            <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Next Session</span>
+            <div className="flex items-baseline mt-3">
+              <span className={`text-5xl font-black tracking-tight tabular-nums ${dm('text-black', 'text-white')}`}>
                 {recommendation.nextWorkout.weight}
               </span>
-              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
-              <span className={dm('mx-3 text-gray-300', 'mx-3 text-gray-600')}>×</span>
-              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+              <span className={`text-xl ml-1 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
+              <span className={`mx-3 ${dm('text-zinc-300', 'text-zinc-600')}`}>×</span>
+              <span className={`text-5xl font-black tracking-tight tabular-nums ${dm('text-black', 'text-white')}`}>
                 {recommendation.nextWorkout.targetReps}
               </span>
-              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
+              <span className={`text-xl ml-1 ${dm('text-muted', 'text-zinc-500')}`}>reps</span>
             </div>
-            <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+            <p className={`text-sm mt-4 leading-relaxed ${dm('text-zinc-500', 'text-zinc-400')}`}>{recommendation.message}</p>
             <button
               onClick={() => openLogView(selectedExercise)}
-              className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
+              className={`w-full mt-5 py-4 rounded-full font-semibold text-base transition-transform active:scale-[0.98] ${dm('bg-black text-white', 'bg-white text-black')}`}
             >
               Start Now
             </button>
           </div>
         )}
 
-        {/* 3. Personal Record */}
+        {/* 3. Personal Record - Clean data display */}
         {pr && (
-          <div className="px-6 py-6">
-            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Personal Record</span>
-            <div className="flex items-baseline mt-2">
-              <span className={`text-5xl font-extrabold tracking-tight ${dm('text-black', 'text-white')}`}>
+          <div className="px-6 py-8">
+            <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Personal Record</span>
+            <div className="flex items-baseline mt-3">
+              <span className={`text-6xl font-black tracking-tight tabular-nums ${dm('text-black', 'text-white')}`}>
                 {Math.round(pr.oneRM * 10) / 10}
               </span>
-              <span className={`text-xl font-medium ml-2 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
-              <span className="ml-3 px-3 py-1 bg-[#00C805] text-white text-xs font-bold rounded-full uppercase">
+              <span className={`text-2xl font-medium ml-2 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
+              <span className="ml-4 px-3 py-1.5 bg-positive text-white text-xs font-bold rounded-full uppercase tracking-wider">
                 1RM
               </span>
             </div>
-            <p className={`text-sm mt-2 ${dm('text-gray-400', 'text-gray-500')}`}>
+            <p className={`text-sm mt-3 ${dm('text-zinc-500', 'text-zinc-400')}`}>
               {pr.weight}kg × {pr.reps} reps on {formatDateShort(pr.date)}
             </p>
           </div>
@@ -1811,7 +1834,7 @@ export default function ProgressiveOverloadTracker() {
               deleteEntry(editedEntryData.id);
               cancelEditingEntry();
             }}
-            className="w-full py-4 text-[#FF5200] font-medium"
+            className="w-full py-4 text-[#FF3B30] font-medium"
           >
             Delete Entry
           </button>
@@ -1931,9 +1954,9 @@ export default function ProgressiveOverloadTracker() {
                   <span className={`w-2 h-2 rounded-full ${
                     currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
                     currentRecommendation.status === 'maintain' ? 'bg-amber-400' :
-                    currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'deload' ? 'bg-[#FF3B30]' :
                     currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
-                    currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'struggle' ? 'bg-[#FF3B30]' :
                     'bg-gray-400'
                   }`} />
                   <span className={`text-sm uppercase tracking-[0.1em] font-medium ${dm('text-gray-500', 'text-gray-400')}`}>
@@ -2147,11 +2170,11 @@ export default function ProgressiveOverloadTracker() {
     );
   }
 
-  // Reward Screen - Swiss Style / Neo-Brutalism
+  // Reward Screen - Trade Republic Style
   if (showRewardScreen && rewardData) {
     // Determine if performance is positive or negative
     const isPositive = rewardData.oneRMChange >= 0;
-    const accentColor = isPositive ? '#00C805' : '#FF5200';
+    const accentColor = isPositive ? COLORS.accent : COLORS.negative;
     const isNewPR = rewardData.isNewPR;
 
     // Generate mini sparkline data from session
@@ -2172,23 +2195,23 @@ export default function ProgressiveOverloadTracker() {
         {/* Upper Section - Hero Performance Display */}
         <div className="flex-1 flex flex-col items-center justify-center px-6">
           {/* Exercise Label */}
-          <span className={`text-xs uppercase tracking-[0.25em] font-medium mb-8 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+          <span className={`text-xs uppercase tracking-[0.3em] font-medium mb-10 ${dm('text-muted', 'text-zinc-500')}`}>
             {rewardData.exerciseName}
           </span>
 
           {/* Hero 1RM Value */}
-          <div className="text-center mb-4">
-            <span className={`text-7xl font-extrabold tracking-tight ${dm('text-black', 'text-white')}`}>
+          <div className="text-center mb-6">
+            <span className={`text-8xl font-black tracking-tight tabular-nums ${dm('text-black', 'text-white')}`}>
               {rewardData.sessionBest1RM.toFixed(1)}
             </span>
-            <span className={`text-2xl font-medium ml-2 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+            <span className={`text-3xl font-medium ml-2 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
           </div>
 
           {/* Performance Change - Stock Style */}
-          <div className="flex items-center gap-3 mb-8">
+          <div className="flex items-center gap-3 mb-10">
             {rewardData.previousBest1RM > 0 ? (
               <>
-                <span className={`text-4xl font-extrabold`} style={{ color: accentColor }}>
+                <span className={`text-4xl font-black tabular-nums`} style={{ color: accentColor }}>
                   {isPositive ? '+' : ''}{rewardData.oneRMChange.toFixed(1)}%
                 </span>
                 {/* Mini Trend Arrow */}
@@ -2201,27 +2224,27 @@ export default function ProgressiveOverloadTracker() {
                 </svg>
               </>
             ) : (
-              <span className={`text-2xl font-extrabold ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>FIRST SESSION</span>
+              <span className={`text-2xl font-bold uppercase tracking-[0.2em] ${dm('text-muted', 'text-zinc-500')}`}>First Session</span>
             )}
           </div>
 
-          {/* Status Badge */}
+          {/* Status Badge - Trophy gold for new PR */}
           {isNewPR && (
-            <div className="px-6 py-2 rounded-full bg-[#00C805]/10">
-              <span className="text-sm font-bold uppercase tracking-[0.2em] text-[#00C805]">
+            <div className="px-6 py-2.5 rounded-full bg-trophy/15">
+              <span className="text-sm font-bold uppercase tracking-[0.2em] text-trophy">
                 New All-Time High
               </span>
             </div>
           )}
 
-          {/* Sparkline */}
+          {/* Sparkline - Minimal */}
           {sparklinePoints.length > 1 && (
-            <div className="mt-8 w-32 h-16">
+            <div className="mt-10 w-36 h-20">
               <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="none">
                 <path
                   d={sparklinePath}
                   stroke={accentColor}
-                  strokeWidth="3"
+                  strokeWidth="2.5"
                   fill="none"
                   strokeLinecap="round"
                 />
@@ -2232,29 +2255,29 @@ export default function ProgressiveOverloadTracker() {
 
         {/* Lower Section - Stats Summary */}
         <div className="px-6 pb-8">
-          {/* Stats Grid - No borders, whitespace separation */}
-          <div className={`rounded-3xl p-6 mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
+          {/* Stats Grid - Clean card */}
+          <div className={`rounded-3xl p-6 mb-6 ${dm('bg-zinc-50', 'bg-zinc-900')}`}>
             <div className="grid grid-cols-2 gap-6">
               {/* Volume */}
               <div>
-                <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>
                   Volume
                 </span>
-                <div className="mt-1">
-                  <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                <div className="mt-2">
+                  <span className={`text-2xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>
                     {rewardData.totalVolume.toLocaleString()}
                   </span>
-                  <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+                  <span className={`text-sm ml-1 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
                 </div>
               </div>
 
               {/* Sets */}
               <div>
-                <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>
                   Sets
                 </span>
-                <div className="mt-1">
-                  <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                <div className="mt-2">
+                  <span className={`text-2xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>
                     {rewardData.setsCount}
                   </span>
                 </div>
@@ -2263,14 +2286,14 @@ export default function ProgressiveOverloadTracker() {
               {/* Previous 1RM */}
               {rewardData.previousBest1RM > 0 && (
                 <div>
-                  <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                  <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>
                     Previous 1RM
                   </span>
-                  <div className="mt-1">
-                    <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  <div className="mt-2">
+                    <span className={`text-2xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>
                       {rewardData.previousBest1RM.toFixed(1)}
                     </span>
-                    <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg</span>
+                    <span className={`text-sm ml-1 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
                   </div>
                 </div>
               )}
@@ -2278,14 +2301,14 @@ export default function ProgressiveOverloadTracker() {
               {/* Next Target */}
               {rewardData.nextGoal && (
                 <div>
-                  <span className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>
+                  <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>
                     Next Target
                   </span>
-                  <div className="mt-1">
-                    <span className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  <div className="mt-2">
+                    <span className={`text-2xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>
                       {rewardData.nextGoal.weight}
                     </span>
-                    <span className={`text-sm ml-1 ${dm('text-[#9CA3AF]', 'text-gray-500')}`}>kg × {rewardData.nextGoal.targetReps}</span>
+                    <span className={`text-sm ml-1 ${dm('text-muted', 'text-zinc-500')}`}>kg × {rewardData.nextGoal.targetReps}</span>
                   </div>
                 </div>
               )}
@@ -2298,7 +2321,7 @@ export default function ProgressiveOverloadTracker() {
               setShowRewardScreen(false);
               setRewardData(null);
             }}
-            className={`w-full h-14 text-base font-semibold rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}
+            className={`w-full h-14 text-base font-semibold rounded-full transition-transform active:scale-[0.98] ${dm('bg-black text-white', 'bg-white text-black')}`}
           >
             Continue
           </button>
@@ -2313,19 +2336,19 @@ export default function ProgressiveOverloadTracker() {
       {activeTab === 'exercises' && <ExerciseListView />}
       {activeTab === 'detail' && <ExerciseDetailView />}
 
-      {/* Profile View - Inline to prevent re-renders */}
+      {/* Profile View - Trade Republic minimal style */}
       {activeTab === 'profile' && (
         <div className={`min-h-screen pb-24 ${dm('bg-white', 'bg-black')}`}>
-          <div className="px-6 pt-12 pb-4">
+          <div className="px-6 pt-14 pb-6">
             <div className="flex items-center justify-between">
               <div>
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Settings</span>
-                <h1 className={`text-4xl font-extrabold mt-1 ${dm('text-black', 'text-white')}`}>Profile</h1>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Settings</span>
+                <h1 className={`text-4xl font-black tracking-tight mt-2 ${dm('text-black', 'text-white')}`}>Profile</h1>
               </div>
               {!editingProfile ? (
                 <button
                   onClick={startEditingProfile}
-                  className={`px-4 py-2 text-sm font-medium rounded-full border ${dm('text-black border-gray-200', 'text-white border-gray-700')}`}
+                  className={`px-5 py-2.5 text-sm font-semibold rounded-full border transition-colors ${dm('text-black border-zinc-200 hover:bg-zinc-50', 'text-white border-zinc-700 hover:bg-zinc-900')}`}
                 >
                   Edit
                 </button>
@@ -2333,13 +2356,13 @@ export default function ProgressiveOverloadTracker() {
                 <div className="flex gap-2">
                   <button
                     onClick={cancelEditingProfile}
-                    className={`px-4 py-2 text-sm font-medium ${dm('text-gray-500', 'text-gray-400')}`}
+                    className={`px-4 py-2 text-sm font-medium ${dm('text-zinc-500', 'text-zinc-400')}`}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={saveProfileChanges}
-                    className={`px-4 py-2 text-sm font-medium rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}
+                    className={`px-5 py-2.5 text-sm font-semibold rounded-full transition-transform active:scale-95 ${dm('bg-black text-white', 'bg-white text-black')}`}
                   >
                     Save
                   </button>
@@ -2351,7 +2374,7 @@ export default function ProgressiveOverloadTracker() {
           {(editingProfile ? editedUser : profileDisplayUser) && (
             <div className="px-6">
               {/* Avatar & Name */}
-              <div className={`pb-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+              <div className={`pb-6 border-b ${dm('border-zinc-100', 'border-zinc-800/50')}`}>
                 <div className="flex items-center mb-6">
                   <img
                     src={(editingProfile ? editedUser : profileDisplayUser)?.avatar}
@@ -2361,7 +2384,7 @@ export default function ProgressiveOverloadTracker() {
                   {!editingProfile && (
                     <div className="ml-4">
                       <h2 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.name}</h2>
-                      <p className={dm('text-gray-400', 'text-gray-500')}>{profileDisplayUser?.email || 'No email'}</p>
+                      <p className={dm('text-muted', 'text-zinc-500')}>{profileDisplayUser?.email || 'No email'}</p>
                     </div>
                   )}
                 </div>
@@ -2369,22 +2392,22 @@ export default function ProgressiveOverloadTracker() {
                 {editingProfile && editedUser && (
                   <div className="space-y-4">
                     <div>
-                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Name</label>
+                      <label className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Name</label>
                       <input
                         type="text"
                         value={editedUser.name || ''}
                         onChange={(e) => updateEditedUserField('name', e.target.value)}
-                        className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')}`}
+                        className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-2xl border-0 focus:ring-2 outline-none ${dm('text-black bg-zinc-50 focus:ring-black', 'text-white bg-zinc-900 focus:ring-white')}`}
                         placeholder="Your name"
                       />
                     </div>
                     <div>
-                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Email</label>
+                      <label className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Email</label>
                       <input
                         type="email"
                         value={editedUser.email || ''}
                         onChange={(e) => updateEditedUserField('email', e.target.value)}
-                        className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')}`}
+                        className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-2xl border-0 focus:ring-2 outline-none ${dm('text-black bg-zinc-50 focus:ring-black', 'text-white bg-zinc-900 focus:ring-white')}`}
                         placeholder="your@email.com"
                       />
                     </div>
@@ -2393,72 +2416,72 @@ export default function ProgressiveOverloadTracker() {
               </div>
 
               {/* Body Stats */}
-              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Body Stats</span>
+              <div className={`py-6 border-b ${dm('border-zinc-100', 'border-zinc-800/50')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Body Stats</span>
 
                 {!editingProfile ? (
                   <div className="grid grid-cols-3 gap-6 mt-4">
                     <div>
-                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.bodyweight}</span>
-                      <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
-                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Weight</p>
+                      <span className={`text-3xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.bodyweight}</span>
+                      <span className={`text-lg ml-1 ${dm('text-muted', 'text-zinc-500')}`}>kg</span>
+                      <p className={`text-xs uppercase tracking-[0.15em] mt-1 ${dm('text-muted', 'text-zinc-500')}`}>Weight</p>
                     </div>
                     <div>
-                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.age}</span>
-                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Age</p>
+                      <span className={`text-3xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.age}</span>
+                      <p className={`text-xs uppercase tracking-[0.15em] mt-1 ${dm('text-muted', 'text-zinc-500')}`}>Age</p>
                     </div>
                     <div>
-                      <span className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.sex === 'male' ? 'M' : 'F'}</span>
-                      <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Sex</p>
+                      <span className={`text-3xl font-black ${dm('text-black', 'text-white')}`}>{profileDisplayUser?.sex === 'male' ? 'M' : 'F'}</span>
+                      <p className={`text-xs uppercase tracking-[0.15em] mt-1 ${dm('text-muted', 'text-zinc-500')}`}>Sex</p>
                     </div>
                   </div>
                 ) : editedUser && (
                   <div className="space-y-4 mt-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Weight (kg)</label>
+                        <label className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Weight (kg)</label>
                         <input
                           type="number"
                           value={editedUser.bodyweight || ''}
                           onChange={(e) => updateEditedUserField('bodyweight', parseInt(e.target.value) || 0)}
-                          className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
-                            dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+                          className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-2xl border-0 focus:ring-2 outline-none ${
+                            dm('text-black bg-zinc-50 focus:ring-black', 'text-white bg-zinc-900 focus:ring-white')
                           }`}
                           placeholder="75"
                         />
                       </div>
                       <div>
-                        <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Age</label>
+                        <label className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Age</label>
                         <input
                           type="number"
                           value={editedUser.age || ''}
                           onChange={(e) => updateEditedUserField('age', parseInt(e.target.value) || 0)}
-                          className={`w-full mt-2 px-4 py-3 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
-                            dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
+                          className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-2xl border-0 focus:ring-2 outline-none ${
+                            dm('text-black bg-zinc-50 focus:ring-black', 'text-white bg-zinc-900 focus:ring-white')
                           }`}
                           placeholder="30"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Sex</label>
+                      <label className={`text-xs uppercase tracking-[0.2em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Sex</label>
                       <div className="flex gap-3 mt-2">
                         <button
                           onClick={() => updateEditedUserField('sex', 'male')}
-                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          className={`flex-1 py-3.5 px-4 rounded-2xl font-semibold transition-all ${
                             editedUser.sex === 'male'
                               ? dm('bg-black text-white', 'bg-white text-black')
-                              : dm('bg-gray-50 text-gray-500', 'bg-gray-800 text-gray-400')
+                              : dm('bg-zinc-50 text-zinc-500', 'bg-zinc-900 text-zinc-400')
                           }`}
                         >
                           Male
                         </button>
                         <button
                           onClick={() => updateEditedUserField('sex', 'female')}
-                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          className={`flex-1 py-3.5 px-4 rounded-2xl font-semibold transition-all ${
                             editedUser.sex === 'female'
                               ? dm('bg-black text-white', 'bg-white text-black')
-                              : dm('bg-gray-50 text-gray-500', 'bg-gray-800 text-gray-400')
+                              : dm('bg-zinc-50 text-zinc-500', 'bg-zinc-900 text-zinc-400')
                           }`}
                         >
                           Female
@@ -2470,50 +2493,50 @@ export default function ProgressiveOverloadTracker() {
               </div>
 
               {/* Workout Stats - Read only */}
-              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Activity</span>
+              <div className={`py-6 border-b ${dm('border-zinc-100', 'border-zinc-800/50')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Activity</span>
                 <div className="grid grid-cols-2 gap-6 mt-4">
                   <div>
-                    <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{entries.length}</span>
-                    <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>Total Sets</p>
+                    <span className={`text-4xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>{entries.length}</span>
+                    <p className={`text-xs uppercase tracking-[0.15em] mt-1 ${dm('text-muted', 'text-zinc-500')}`}>Total Sets</p>
                   </div>
                   <div>
-                    <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{Object.keys(personalRecords).length}</span>
-                    <p className={`text-xs uppercase tracking-wider mt-1 ${dm('text-gray-400', 'text-gray-500')}`}>PRs Set</p>
+                    <span className={`text-4xl font-black tabular-nums ${dm('text-black', 'text-white')}`}>{Object.keys(personalRecords).length}</span>
+                    <p className={`text-xs uppercase tracking-[0.15em] mt-1 ${dm('text-muted', 'text-zinc-500')}`}>PRs Set</p>
                   </div>
                 </div>
               </div>
 
-              {/* Appearance */}
-              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Appearance</span>
+              {/* Appearance - Trade Republic toggle style */}
+              <div className={`py-6 border-b ${dm('border-zinc-100', 'border-zinc-800/50')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Appearance</span>
                 <button
                   onClick={toggleDarkMode}
-                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl ${dm('bg-gray-50', 'bg-gray-800')}`}
+                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl transition-colors ${dm('bg-zinc-50 active:bg-zinc-100', 'bg-zinc-900 active:bg-zinc-800')}`}
                 >
                   <div className="text-left flex items-center gap-3">
                     {darkMode ? (
-                      <svg className="w-5 h-5 text-[#00C805]" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-positive" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
                       </svg>
                     ) : (
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                      <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                     )}
                     <div>
                       <span className={`font-semibold ${dm('text-black', 'text-white')}`}>
                         {darkMode ? 'Dark Mode' : 'Light Mode'}
                       </span>
-                      <p className={`text-sm mt-0.5 ${dm('text-gray-400', 'text-gray-500')}`}>
+                      <p className={`text-sm mt-0.5 ${dm('text-muted', 'text-zinc-500')}`}>
                         {darkMode ? 'Easy on the eyes' : 'Classic bright theme'}
                       </p>
                     </div>
                   </div>
                   <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
-                    darkMode ? 'bg-[#00C805]' : 'bg-gray-300'
+                    darkMode ? 'bg-positive' : 'bg-zinc-300'
                   }`}>
-                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
                       darkMode ? 'translate-x-5' : 'translate-x-0'
                     }`} />
                   </div>
@@ -2521,9 +2544,9 @@ export default function ProgressiveOverloadTracker() {
               </div>
 
               {/* Training Phase */}
-              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Training Phase</span>
-                <p className={`text-sm mt-1 mb-4 ${dm('text-gray-400', 'text-gray-500')}`}>
+              <div className={`py-6 border-b ${dm('border-zinc-100', 'border-zinc-800/50')}`}>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Training Phase</span>
+                <p className={`text-sm mt-1 mb-4 ${dm('text-zinc-500', 'text-zinc-400')}`}>
                   Adjusts rep ranges, intensity, and rest times
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -2531,14 +2554,14 @@ export default function ProgressiveOverloadTracker() {
                     <button
                       key={phase}
                       onClick={() => updateTrainingPhase(phase)}
-                      className={`py-3 px-4 rounded-xl font-medium text-sm capitalize transition-colors ${
+                      className={`py-3.5 px-4 rounded-2xl font-semibold text-sm capitalize transition-all ${
                         trainingPhase === phase
                           ? dm('bg-black text-white', 'bg-white text-black')
-                          : dm('bg-gray-50 text-gray-600', 'bg-gray-800 text-gray-400')
+                          : dm('bg-zinc-50 text-zinc-600', 'bg-zinc-900 text-zinc-400')
                       }`}
                     >
                       <span className="block">{phase}</span>
-                      <span className={`text-xs ${trainingPhase === phase ? 'opacity-75' : dm('text-gray-400', 'text-gray-500')}`}>
+                      <span className={`text-xs font-medium ${trainingPhase === phase ? 'opacity-70' : dm('text-zinc-400', 'text-zinc-500')}`}>
                         {config.rep_range} reps
                       </span>
                     </button>
@@ -2548,23 +2571,23 @@ export default function ProgressiveOverloadTracker() {
 
               {/* Data Mode Toggle */}
               <div className="py-6">
-                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Data Source</span>
+                <span className={`text-xs uppercase tracking-[0.25em] font-medium ${dm('text-muted', 'text-zinc-500')}`}>Data Source</span>
                 <button
                   onClick={handleToggleDataMode}
-                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl ${dm('bg-gray-50', 'bg-gray-800')}`}
+                  className={`w-full mt-4 flex items-center justify-between py-4 px-5 rounded-2xl transition-colors ${dm('bg-zinc-50 active:bg-zinc-100', 'bg-zinc-900 active:bg-zinc-800')}`}
                 >
                   <div className="text-left">
                     <span className={`font-semibold ${dm('text-black', 'text-white')}`}>
                       {dataMode === 'demo' ? 'Demo Data' : 'Your Data'}
                     </span>
-                    <p className={`text-sm mt-0.5 ${dm('text-gray-400', 'text-gray-500')}`}>
+                    <p className={`text-sm mt-0.5 ${dm('text-zinc-500', 'text-zinc-400')}`}>
                       {dataMode === 'demo' ? 'Using generated sample data' : 'Using your logged workouts'}
                     </p>
                   </div>
                   <div className={`w-12 h-7 rounded-full flex items-center px-1 transition-colors ${
-                    dataMode === 'user' ? 'bg-[#00C805]' : 'bg-gray-300'
+                    dataMode === 'user' ? 'bg-positive' : 'bg-zinc-300'
                   }`}>
-                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
                       dataMode === 'user' ? 'translate-x-5' : 'translate-x-0'
                     }`} />
                   </div>
@@ -2575,7 +2598,7 @@ export default function ProgressiveOverloadTracker() {
               {dataMode === 'demo' && (
                 <button
                   onClick={resetDemo}
-                  className="w-full py-4 text-[#FF5200] font-medium"
+                  className="w-full py-4 text-negative font-semibold"
                 >
                   Reset Demo Data
                 </button>
@@ -2585,31 +2608,31 @@ export default function ProgressiveOverloadTracker() {
         </div>
       )}
 
-      {/* Bottom Navigation - Minimal */}
+      {/* Bottom Navigation - Minimal Trade Republic style */}
       {activeTab !== 'detail' && (
-        <nav className={`fixed bottom-0 left-0 right-0 border-t ${dm('bg-white border-gray-100', 'bg-black border-gray-800')}`}>
-          <div className="max-w-[600px] mx-auto flex">
+        <nav className={`fixed bottom-0 left-0 right-0 border-t ${dm('bg-white border-zinc-100', 'bg-black border-zinc-800/50')}`}>
+          <div className="max-w-[430px] mx-auto flex">
             <button
               onClick={() => setActiveTab('exercises')}
-              className={`flex-1 py-5 flex flex-col items-center gap-1 ${
-                activeTab === 'exercises' ? dm('text-black', 'text-white') : dm('text-gray-300', 'text-gray-600')
+              className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
+                activeTab === 'exercises' ? dm('text-black', 'text-white') : dm('text-zinc-400', 'text-zinc-600')
               }`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={activeTab === 'exercises' ? 2 : 1.5} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-              <span className="text-[10px] uppercase tracking-wider font-medium">Lifts</span>
+              <span className="text-[10px] uppercase tracking-[0.15em] font-medium">Lifts</span>
             </button>
             <button
               onClick={() => setActiveTab('profile')}
-              className={`flex-1 py-5 flex flex-col items-center gap-1 ${
-                activeTab === 'profile' ? dm('text-black', 'text-white') : dm('text-gray-300', 'text-gray-600')
+              className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
+                activeTab === 'profile' ? dm('text-black', 'text-white') : dm('text-zinc-400', 'text-zinc-600')
               }`}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={activeTab === 'profile' ? 2 : 1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-              <span className="text-[10px] uppercase tracking-wider font-medium">Profile</span>
+              <span className="text-[10px] uppercase tracking-[0.15em] font-medium">Profile</span>
             </button>
           </div>
         </nav>

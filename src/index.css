@@ -1,8 +1,53 @@
+/* Inter Font - Neo-Grotesque for Trade Republic aesthetic */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #FFFFFF;
-  min-height: 100vh;
+@layer base {
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: #FFFFFF;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Constrain content width for desktop - mobile-first design */
+  #root {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  @media (min-width: 640px) {
+    #root {
+      max-width: 430px; /* iPhone Pro Max width */
+    }
+
+    body {
+      background-color: #F5F5F5;
+    }
+  }
+}
+
+@layer utilities {
+  /* Trade Republic style uppercase labels */
+  .label-uppercase {
+    @apply text-xs uppercase tracking-[0.2em] font-medium;
+  }
+
+  /* Pill button style */
+  .btn-pill {
+    @apply rounded-full font-semibold transition-colors;
+  }
+
+  /* Card style with large radius */
+  .card-tr {
+    @apply rounded-3xl;
+  }
 }
