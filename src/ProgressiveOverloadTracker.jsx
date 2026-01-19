@@ -1247,21 +1247,24 @@ export default function ProgressiveOverloadTracker() {
       setChartAnimated(true);
     };
 
-    // Level Overview Modal
+    // Level Overview Modal - Minimalist Design
     if (showLevelOverview && strengthThresholds) {
+      // Core colors: beginner=#000000, intermediate=#6B7280, advanced=#00C805, professional=#FFD700
       const levels = [
-        { key: 'beginner', name: 'Beginner', color: 'bg-green-500', textColor: 'text-green-600', range: `0 - ${strengthThresholds.intermediate - 1}kg` },
-        { key: 'intermediate', name: 'Intermediate', color: 'bg-blue-500', textColor: 'text-blue-600', range: `${strengthThresholds.intermediate} - ${strengthThresholds.advanced - 1}kg` },
-        { key: 'advanced', name: 'Advanced', color: 'bg-purple-500', textColor: 'text-purple-600', range: `${strengthThresholds.advanced} - ${strengthThresholds.professional - 1}kg` },
-        { key: 'professional', name: 'Professional', color: 'bg-amber-400', textColor: 'text-amber-600', range: `${strengthThresholds.professional}kg+` },
+        { key: 'beginner', name: 'Beginner', hex: '#000000', range: `0 - ${strengthThresholds.intermediate - 1}kg` },
+        { key: 'intermediate', name: 'Intermediate', hex: '#6B7280', range: `${strengthThresholds.intermediate} - ${strengthThresholds.advanced - 1}kg` },
+        { key: 'advanced', name: 'Advanced', hex: '#00C805', range: `${strengthThresholds.advanced} - ${strengthThresholds.professional - 1}kg` },
+        { key: 'professional', name: 'Professional', hex: '#FFD700', range: `${strengthThresholds.professional}kg+` },
       ];
 
       const currentOneRM = pr?.oneRM || 0;
+      const currentLevelIndex = levels.findIndex(l => l.key === strengthLevel);
+      const currentLevelData = levels[currentLevelIndex];
 
       return (
         <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
-          {/* Header */}
-          <div className={`flex items-center justify-between px-6 pt-12 pb-4 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+          {/* Minimal Header */}
+          <div className="flex items-center justify-between px-6 pt-12 pb-6">
             <button
               onClick={() => setShowLevelOverview(false)}
               className={dm('text-gray-400', 'text-gray-500')}
@@ -1270,28 +1273,42 @@ export default function ProgressiveOverloadTracker() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <h1 className={`text-xl font-bold ${dm('text-black', 'text-white')}`}>Strength Levels</h1>
             <div className="w-6" />
           </div>
 
-          {/* Exercise & Current Stats */}
-          <div className={`px-6 py-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
-            <h2 className={`text-2xl font-bold ${dm('text-black', 'text-white')}`}>{selectedExercise}</h2>
-            <p className={dm('text-gray-500', 'text-gray-400')}>Based on your profile: {user?.bodyweight || 75}kg, {user?.age || 30}y, {user?.sex || 'male'}</p>
-            {pr && (
-              <div className="mt-4 flex items-baseline gap-2">
-                <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>{Math.round(currentOneRM)}kg</span>
-                <span className={dm('text-gray-400', 'text-gray-500')}>estimated 1RM</span>
+          {/* Hero Section - Current Level */}
+          <div className="px-6 pb-8">
+            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>
+              {selectedExercise}
+            </span>
+            <div className="mt-2 flex items-baseline gap-3">
+              <span className={`text-5xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                {Math.round(currentOneRM)}
+              </span>
+              <span className={`text-xl ${dm('text-gray-400', 'text-gray-500')}`}>kg 1RM</span>
+            </div>
+            {currentLevelData && (
+              <div className="mt-4 flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: currentLevelData.hex }}
+                />
+                <span
+                  className="text-sm font-semibold uppercase tracking-wider"
+                  style={{ color: currentLevelData.hex === '#000000' && !darkMode ? '#000000' : currentLevelData.hex }}
+                >
+                  {currentLevelData.name}
+                </span>
               </div>
             )}
           </div>
 
-          {/* Levels List */}
-          <div className="flex-1 px-6 py-6 overflow-y-auto">
-            <div className="space-y-3">
+          {/* Levels List - Stark Design */}
+          <div className="flex-1 px-6 overflow-y-auto">
+            <div className="space-y-px">
               {levels.map((level, index) => {
                 const isCurrentLevel = strengthLevel === level.key;
-                const isPastLevel = levels.findIndex(l => l.key === strengthLevel) > index;
+                const isPastLevel = currentLevelIndex > index;
                 const threshold = strengthThresholds[level.key];
 
                 // Calculate progress within this level
@@ -1305,50 +1322,51 @@ export default function ProgressiveOverloadTracker() {
                 return (
                   <div
                     key={level.key}
-                    className={`p-4 rounded-2xl border-2 transition-all ${
-                      isCurrentLevel
-                        ? dm('border-black bg-white shadow-lg', 'border-white bg-gray-900 shadow-lg')
-                        : isPastLevel
-                        ? dm('border-gray-200 bg-gray-50', 'border-gray-700 bg-gray-800')
-                        : dm('border-gray-100 bg-white', 'border-gray-800 bg-gray-900')
+                    className={`py-5 border-b ${dm('border-gray-100', 'border-gray-800')} ${
+                      isCurrentLevel ? '' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded-full ${level.color} ${isPastLevel ? 'opacity-50' : ''}`} />
-                        <div>
-                          <span className={`font-bold ${isCurrentLevel ? dm('text-black', 'text-white') : isPastLevel ? 'text-gray-400' : dm('text-gray-600', 'text-gray-300')}`}>
-                            {level.name}
-                          </span>
-                          {isCurrentLevel && (
-                            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${dm('bg-black text-white', 'bg-white text-black')}`}>
-                              Current
-                            </span>
-                          )}
-                          {isPastLevel && (
-                            <span className="ml-2 text-xs text-gray-400">
-                              ✓ Achieved
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`font-semibold ${isCurrentLevel ? level.textColor : 'text-gray-400'}`}>
-                          {level.range}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={`w-2.5 h-2.5 rounded-full ${isPastLevel && !isCurrentLevel ? 'opacity-30' : ''}`}
+                          style={{ backgroundColor: level.hex === '#000000' && darkMode ? '#FFFFFF' : level.hex }}
+                        />
+                        <span className={`font-semibold ${
+                          isCurrentLevel
+                            ? dm('text-black', 'text-white')
+                            : isPastLevel
+                            ? dm('text-gray-300', 'text-gray-600')
+                            : dm('text-gray-500', 'text-gray-400')
+                        }`}>
+                          {level.name}
                         </span>
+                        {isPastLevel && !isCurrentLevel && (
+                          <span className={dm('text-gray-300', 'text-gray-600')}>✓</span>
+                        )}
                       </div>
+                      <span className={`font-mono text-sm ${
+                        isCurrentLevel
+                          ? dm('text-black', 'text-white')
+                          : dm('text-gray-400', 'text-gray-500')
+                      }`}>
+                        {level.range}
+                      </span>
                     </div>
 
                     {/* Progress bar for current level */}
                     {isCurrentLevel && (
-                      <div className="mt-3">
-                        <div className={`h-2 rounded-full overflow-hidden ${dm('bg-gray-100', 'bg-gray-700')}`}>
+                      <div className="mt-4 ml-6">
+                        <div className={`h-1 rounded-full overflow-hidden ${dm('bg-gray-100', 'bg-gray-800')}`}>
                           <div
-                            className={`h-full ${level.color} transition-all duration-500`}
-                            style={{ width: `${progressPercent}%` }}
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${progressPercent}%`,
+                              backgroundColor: level.hex === '#000000' && darkMode ? '#FFFFFF' : level.hex
+                            }}
                           />
                         </div>
-                        <div className={`flex justify-between mt-2 text-xs ${dm('text-gray-400', 'text-gray-500')}`}>
+                        <div className={`flex justify-between mt-2 text-xs font-mono ${dm('text-gray-400', 'text-gray-500')}`}>
                           <span>{Math.round(currentOneRM)}kg</span>
                           <span>{threshold}kg</span>
                         </div>
@@ -1359,12 +1377,11 @@ export default function ProgressiveOverloadTracker() {
               })}
             </div>
 
-            {/* Multiplier Info */}
-            <div className={`mt-8 p-4 rounded-2xl ${dm('bg-gray-50', 'bg-gray-900')}`}>
-              <h3 className={`text-sm font-semibold uppercase tracking-wider mb-2 ${dm('text-gray-600', 'text-gray-400')}`}>How levels are calculated</h3>
-              <p className={`text-sm leading-relaxed ${dm('text-gray-500', 'text-gray-400')}`}>
-                Strength levels are based on your estimated 1 rep max (1RM) relative to your bodyweight, adjusted for age.
-                These standards help you track your progress compared to typical lifters at each experience level.
+            {/* Minimal Info Footer */}
+            <div className="py-8">
+              <p className={`text-xs leading-relaxed ${dm('text-gray-400', 'text-gray-500')}`}>
+                Based on {user?.bodyweight || 75}kg bodyweight, {user?.age || 30} years, {user?.sex || 'male'}.
+                Strength levels compare your 1RM to typical lifters at each experience level.
               </p>
             </div>
           </div>
@@ -1394,12 +1411,17 @@ export default function ProgressiveOverloadTracker() {
             {strengthLevel && (
               <button
                 onClick={() => setShowLevelOverview(true)}
-                className={`px-3 py-1 text-xs font-bold rounded-full uppercase transition-transform active:scale-95 ${
-                  strengthLevel === 'professional' ? 'bg-amber-400 text-amber-900' :
-                  strengthLevel === 'advanced' ? 'bg-purple-500 text-white' :
-                  strengthLevel === 'intermediate' ? 'bg-blue-500 text-white' :
-                  'bg-green-500 text-white'
-                }`}
+                className="px-3 py-1 text-xs font-bold rounded-full uppercase transition-transform active:scale-95"
+                style={{
+                  backgroundColor: strengthLevel === 'professional' ? '#FFD700' :
+                    strengthLevel === 'advanced' ? '#00C805' :
+                    strengthLevel === 'intermediate' ? '#6B7280' :
+                    darkMode ? '#FFFFFF' : '#000000',
+                  color: strengthLevel === 'professional' ? '#000000' :
+                    strengthLevel === 'advanced' ? '#FFFFFF' :
+                    strengthLevel === 'intermediate' ? '#FFFFFF' :
+                    darkMode ? '#000000' : '#FFFFFF'
+                }}
               >
                 {strengthLevel}
               </button>
@@ -1408,16 +1430,21 @@ export default function ProgressiveOverloadTracker() {
           {nextLevelInfo && !nextLevelInfo.isMax && (
             <p className={`text-sm mt-2 ${dm('text-gray-400', 'text-gray-500')}`}>
               <span className={`font-semibold ${dm('text-black', 'text-white')}`}>+{nextLevelInfo.weightNeeded}kg</span> to reach{' '}
-              <span className={`font-semibold ${
-                nextLevelInfo.nextLevel === 'professional' ? 'text-amber-500' :
-                nextLevelInfo.nextLevel === 'advanced' ? 'text-purple-500' :
-                nextLevelInfo.nextLevel === 'intermediate' ? 'text-blue-500' :
-                'text-green-500'
-              }`}>{nextLevelInfo.nextLevel}</span>
+              <span
+                className="font-semibold"
+                style={{
+                  color: nextLevelInfo.nextLevel === 'professional' ? '#FFD700' :
+                    nextLevelInfo.nextLevel === 'advanced' ? '#00C805' :
+                    nextLevelInfo.nextLevel === 'intermediate' ? '#6B7280' :
+                    darkMode ? '#FFFFFF' : '#000000'
+                }}
+              >
+                {nextLevelInfo.nextLevel}
+              </span>
             </p>
           )}
           {nextLevelInfo?.isMax && (
-            <p className="text-sm text-amber-500 mt-2 font-medium">
+            <p className="text-sm mt-2 font-medium" style={{ color: '#FFD700' }}>
               You've reached the highest level!
             </p>
           )}
