@@ -1574,12 +1574,66 @@ export default function ProgressiveOverloadTracker() {
               <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
             </div>
             <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+
+            {/* Detailed Reasoning Breakdown */}
+            {recommendation.reasoning_breakdown && (
+              <div className={`mt-4 pt-4 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Last Session</span>
+                    <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.last_session}</span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Trend</span>
+                    <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.trend}</span>
+                  </div>
+                  <div className={`pt-2 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+                    <p className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.next_step}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => openLogView(selectedExercise)}
               className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
             >
               Start Now
             </button>
+
+            {/* User Feedback */}
+            <div className={`mt-3 pt-3 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+              <p className={`text-xs mb-2 ${dm('text-gray-400', 'text-gray-500')}`}>Is this recommendation appropriate?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    console.log('Feedback: Too easy for', selectedExercise, recommendation);
+                    // TODO: Store feedback for future algorithm improvements
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                >
+                  Too Easy
+                </button>
+                <button
+                  onClick={() => {
+                    console.log('Feedback: Just right for', selectedExercise, recommendation);
+                    // TODO: Store feedback for future algorithm improvements
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                >
+                  Just Right
+                </button>
+                <button
+                  onClick={() => {
+                    console.log('Feedback: Too hard for', selectedExercise, recommendation);
+                    // TODO: Store feedback for future algorithm improvements
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                >
+                  Too Hard
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

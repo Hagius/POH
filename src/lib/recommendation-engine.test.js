@@ -76,38 +76,58 @@ describe('calculateE1RM', () => {
 // ============================================================================
 
 describe('determineTrainingStatus', () => {
-  it('should return "progressing" for >2.5% gain', () => {
-    const result = determineTrainingStatus(105, 100, 5);
+  it('should return "progressing" for >2.5% gain with long-term data', () => {
+    const result = determineTrainingStatus(105, 100, 5, []);
     expect(result).toBe('progressing');
   });
 
-  it('should return "plateau" for changes within ±2.5%', () => {
-    const result = determineTrainingStatus(102, 100, 5);
+  it('should return "plateau" for changes within ±2.5% with long-term data', () => {
+    const result = determineTrainingStatus(102, 100, 5, []);
     expect(result).toBe('plateau');
   });
 
-  it('should return "regressing" for >2.5% loss', () => {
-    const result = determineTrainingStatus(95, 100, 5);
+  it('should return "regressing" for >2.5% loss with long-term data', () => {
+    const result = determineTrainingStatus(95, 100, 5, []);
     expect(result).toBe('regressing');
   });
 
-  it('should return "insufficient_data" for <3 sessions', () => {
-    const result = determineTrainingStatus(105, 100, 2);
+  it('should return "insufficient_data" for <2 sessions', () => {
+    const result = determineTrainingStatus(105, 100, 1, []);
     expect(result).toBe('insufficient_data');
   });
 
-  it('should return "insufficient_data" for zero previous e1RM', () => {
-    const result = determineTrainingStatus(100, 0, 5);
+  it('should detect short-term progression when no long-term data available', () => {
+    // Two recent sessions showing progression
+    const recentHistory = [
+      { date: '2026-01-15', weight: 80, reps: 8, rir: 2, isActive: true },
+      { date: '2026-01-18', weight: 82.5, reps: 8, rir: 2, isActive: true }
+    ];
+    const result = determineTrainingStatus(100, 0, 2, recentHistory);
+    expect(result).toBe('progressing');
+  });
+
+  it('should detect short-term plateau when performance is stable', () => {
+    // Recent sessions with stable performance
+    const recentHistory = [
+      { date: '2026-01-15', weight: 80, reps: 8, rir: 2, isActive: true },
+      { date: '2026-01-18', weight: 80, reps: 8, rir: 2, isActive: true }
+    ];
+    const result = determineTrainingStatus(100, 0, 2, recentHistory);
+    expect(result).toBe('plateau');
+  });
+
+  it('should return "insufficient_data" for zero previous e1RM and no recent history', () => {
+    const result = determineTrainingStatus(100, 0, 5, []);
     expect(result).toBe('insufficient_data');
   });
 
   it('should handle exactly 2.5% gain as progressing', () => {
-    const result = determineTrainingStatus(102.5, 100, 5);
+    const result = determineTrainingStatus(102.5, 100, 5, []);
     expect(result).toBe('progressing');
   });
 
   it('should handle exactly -2.5% loss as regressing', () => {
-    const result = determineTrainingStatus(97.5, 100, 5);
+    const result = determineTrainingStatus(97.5, 100, 5, []);
     expect(result).toBe('regressing');
   });
 });
