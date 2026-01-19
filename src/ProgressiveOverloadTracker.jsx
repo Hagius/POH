@@ -24,9 +24,10 @@ import {
   getStrengthLevel,
 } from './lib/strengthStandards';
 import {
-  getNextWorkoutRecommendation,
-  getExerciseConfig,
-} from './lib/progression';
+  generateRecommendation,
+  toLegacyFormat,
+  PHASE_CONFIG,
+} from './lib/recommendation-engine';
 
 // Design Tokens - Trade Republic Style
 const COLORS = {
@@ -680,6 +681,21 @@ export default function ProgressiveOverloadTracker() {
     });
   };
 
+  // Training phase state (hypertrophy, strength, peaking, explosive)
+  const [trainingPhase, setTrainingPhase] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('poh-training-phase');
+      return saved || 'hypertrophy';
+    }
+    return 'hypertrophy';
+  });
+
+  // Update training phase
+  const updateTrainingPhase = (phase) => {
+    setTrainingPhase(phase);
+    localStorage.setItem('poh-training-phase', phase);
+  };
+
   // Dark mode color classes helper
   const dm = (lightClass, darkClass) => darkMode ? darkClass : lightClass;
 
@@ -861,20 +877,22 @@ export default function ProgressiveOverloadTracker() {
     return Math.round(highest1RM * 10) / 10; // Round to 1 decimal
   };
 
-  // Get recommendation for exercise
+  // Get recommendation for exercise using new recommendation engine
   const getRecommendation = (exerciseName) => {
     const exerciseHistory = entries
       .filter((e) => e.name === exerciseName)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    if (exerciseHistory.length === 0) return null;
+    // Generate recommendation using new engine
+    const recommendation = generateRecommendation({
+      exercise: exerciseName,
+      history: entries, // Pass full history, engine will filter
+      userAge: user?.age || 30,
+      phase: trainingPhase
+    });
 
-    const lastWorkout = exerciseHistory[0];
-    return getNextWorkoutRecommendation(
-      { weight: lastWorkout.weight, reps: lastWorkout.reps, sets: lastWorkout.sets || 1 },
-      exerciseName,
-      exerciseHistory.slice(1)
-    );
+    // Convert to legacy format for UI compatibility
+    return toLegacyFormat(recommendation);
   };
 
   // Log all sets that have been added to the list
@@ -923,12 +941,27 @@ export default function ProgressiveOverloadTracker() {
       accomplishmentType = 'recovery';
     }
 
-    // Get next session goal
-    const nextRecommendation = getNextWorkoutRecommendation(
-      { weight: allSets[0].weight, reps: allSets[0].reps, sets: allSets.length },
-      selectedExercise,
-      exerciseHistory
-    );
+    // Get next session goal using new recommendation engine
+    // Include the sets we just logged in the history for accurate recommendation
+    const updatedHistory = [
+      ...allSets.map(set => ({
+        id: 'pending',
+        name: selectedExercise,
+        date: new Date().toISOString().split('T')[0],
+        weight: set.weight,
+        reps: set.reps,
+        sets: 1,
+      })),
+      ...exerciseHistory
+    ];
+
+    const nextRecommendation = generateRecommendation({
+      exercise: selectedExercise,
+      history: [...entries, ...updatedHistory.filter(e => e.id === 'pending')],
+      userAge: user?.age || 30,
+      phase: trainingPhase
+    });
+    const legacyNextRec = toLegacyFormat(nextRecommendation);
 
     // Store reward data
     setRewardData({
@@ -940,8 +973,8 @@ export default function ProgressiveOverloadTracker() {
       previousBest1RM,
       oneRMChange,
       isNewPR: sessionBest1RM > currentPR && currentPR > 0,
-      nextGoal: nextRecommendation?.nextWorkout || null,
-      recommendation: nextRecommendation,
+      nextGoal: legacyNextRec?.nextWorkout || null,
+      recommendation: legacyNextRec,
     });
 
     const today = new Date().toISOString().split('T')[0];
@@ -2451,7 +2484,7 @@ export default function ProgressiveOverloadTracker() {
               </div>
 
               {/* Appearance */}
-              <div className="py-6 border-b border-gray-100">
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
                 <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Appearance</span>
                 <button
                   onClick={toggleDarkMode}
@@ -2484,6 +2517,32 @@ export default function ProgressiveOverloadTracker() {
                     }`} />
                   </div>
                 </button>
+              </div>
+
+              {/* Training Phase */}
+              <div className={`py-6 border-b ${dm('border-gray-100', 'border-gray-800')}`}>
+                <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Training Phase</span>
+                <p className={`text-sm mt-1 mb-4 ${dm('text-gray-400', 'text-gray-500')}`}>
+                  Adjusts rep ranges, intensity, and rest times
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(PHASE_CONFIG).map(([phase, config]) => (
+                    <button
+                      key={phase}
+                      onClick={() => updateTrainingPhase(phase)}
+                      className={`py-3 px-4 rounded-xl font-medium text-sm capitalize transition-colors ${
+                        trainingPhase === phase
+                          ? dm('bg-black text-white', 'bg-white text-black')
+                          : dm('bg-gray-50 text-gray-600', 'bg-gray-800 text-gray-400')
+                      }`}
+                    >
+                      <span className="block">{phase}</span>
+                      <span className={`text-xs ${trainingPhase === phase ? 'opacity-75' : dm('text-gray-400', 'text-gray-500')}`}>
+                        {config.rep_range} reps
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Data Mode Toggle */}
