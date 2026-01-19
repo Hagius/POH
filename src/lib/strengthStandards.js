@@ -42,12 +42,12 @@ function getAgeMultiplier(age) {
   return 0.8;
 }
 
-// Level colors for the chart
+// Level colors for the chart - using core application colors
 export const LEVEL_COLORS = {
-  beginner: { fill: '#4ade80', stroke: '#22c55e', label: 'Beginner' },      // Green
-  intermediate: { fill: '#60a5fa', stroke: '#3b82f6', label: 'Intermediate' }, // Blue
-  advanced: { fill: '#c084fc', stroke: '#a855f7', label: 'Advanced' },      // Purple
-  professional: { fill: '#fbbf24', stroke: '#f59e0b', label: 'Professional' }, // Gold/Amber
+  beginner: { fill: '#FF3B30', stroke: '#FF3B30', label: 'Beginner' },      // Apple System Red (negative)
+  intermediate: { fill: '#6B7280', stroke: '#6B7280', label: 'Intermediate' }, // Muted gray
+  advanced: { fill: '#00C805', stroke: '#00C805', label: 'Advanced' },      // Accent green
+  professional: { fill: '#FFD700', stroke: '#FFD700', label: 'Professional' }, // Gold (rewards)
 };
 
 /**

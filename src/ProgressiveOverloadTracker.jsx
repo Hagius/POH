@@ -29,7 +29,7 @@ import {
   PHASE_CONFIG,
 } from './lib/recommendation-engine';
 
-// Design Tokens - Trade Republic Style
+// Design Tokens - Core Application Colors
 const COLORS = {
   bg: '#FFFFFF',
   bgDark: '#000000',
@@ -37,51 +37,14 @@ const COLORS = {
   textMuted: '#6B7280',
   textLight: '#9CA3AF',
   accent: '#00C805', // Neon Green for progress
-  negative: '#FF5200', // Neon Orange for regression
+  negative: '#FF3B30', // Apple System Red for regression
+  gold: '#FFD700', // Gold for rewards and achievements
   border: '#E5E7EB',
 };
 
-// Trader Color Logic - 4 distinct states
-const TRADER_COLORS = {
-  UNDERVALUED: {
-    color: '#F2994A',      // Muted Amber
-    bg: 'bg-[#F2994A]/10',
-    text: 'text-[#F2994A]',
-    label: 'UNREALIZED GAINS',
-    description: 'Below target',
-  },
-  MARKET_PERFORM: {
-    color: '#00C805',      // Fintech Green
-    bg: 'bg-[#00C805]/15',
-    text: 'text-[#00C805]',
-    label: 'TARGET MET',
-    description: 'Exact target',
-  },
-  ALPHA: {
-    color: '#00F0FF',      // Electric Cyan
-    bg: 'bg-[#00F0FF]/15',
-    text: 'text-[#00F0FF]',
-    label: 'ALPHA GENERATED',
-    description: 'Above target',
-  },
-  ATH: {
-    color: '#FFD700',      // Gold
-    bg: 'bg-[#FFD700]/20',
-    text: 'text-[#FFD700]',
-    label: 'NEW ATH BREAKOUT',
-    description: 'All-time high',
-  },
-  NEUTRAL: {
-    color: '#9CA3AF',
-    bg: 'bg-gray-100',
-    text: 'text-gray-500',
-    label: '—',
-    description: 'No data',
-  },
-};
-
-// Helper function to determine trader state
-const getTraderState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
+// Helper function to determine performance state using core colors
+// Returns: 'ATH' (gold), 'ABOVE' (gold), 'TARGET' (accent), 'BELOW' (negative), 'NEUTRAL' (muted)
+const getPerformanceState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
   if (!inputWeight || inputWeight <= 0) return 'NEUTRAL';
 
   // ATH: Input > All-Time Max
@@ -92,18 +55,18 @@ const getTraderState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
   // Without recommendation, we can only check ATH
   if (!recommendedWeight) return 'NEUTRAL';
 
-  // ALPHA: Above target but not ATH
+  // Above target but not ATH
   if (inputWeight > recommendedWeight) {
-    return 'ALPHA';
+    return 'ABOVE';
   }
 
-  // MARKET_PERFORM: Exact target (within small tolerance)
+  // Exact target (within small tolerance)
   if (Math.abs(inputWeight - recommendedWeight) < 0.1) {
-    return 'MARKET_PERFORM';
+    return 'TARGET';
   }
 
-  // UNDERVALUED: Below target
-  return 'UNDERVALUED';
+  // Below target
+  return 'BELOW';
 };
 
 // CountUp Animation Component for Ticker Effect
@@ -161,14 +124,14 @@ const injectTraderStyles = () => {
   const style = document.createElement('style');
   style.id = 'trader-styles';
   style.textContent = `
-    /* Striped/Hashed pattern for UNDERVALUED state */
-    .trader-striped {
+    /* Striped/Hashed pattern for below-target state */
+    .below-target-striped {
       background: repeating-linear-gradient(
         -45deg,
-        rgba(242, 153, 74, 0.1),
-        rgba(242, 153, 74, 0.1) 4px,
-        rgba(242, 153, 74, 0.2) 4px,
-        rgba(242, 153, 74, 0.2) 8px
+        rgba(255, 59, 48, 0.1),
+        rgba(255, 59, 48, 0.1) 4px,
+        rgba(255, 59, 48, 0.2) 4px,
+        rgba(255, 59, 48, 0.2) 8px
       );
     }
 
@@ -613,7 +576,7 @@ const SwipeableEntry = ({ children, onEdit, onToggleActive, onDelete, isActive =
         </button>
         <button
           onClick={() => { onDelete(); closeSwipe(); }}
-          className="w-[60px] h-full bg-[#FF5200] flex items-center justify-center"
+          className="w-[60px] h-full bg-[#FF3B30] flex items-center justify-center"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1811,7 +1774,7 @@ export default function ProgressiveOverloadTracker() {
               deleteEntry(editedEntryData.id);
               cancelEditingEntry();
             }}
-            className="w-full py-4 text-[#FF5200] font-medium"
+            className="w-full py-4 text-[#FF3B30] font-medium"
           >
             Delete Entry
           </button>
@@ -1870,13 +1833,12 @@ export default function ProgressiveOverloadTracker() {
     // Get All-Time High (max weight ever lifted for this exercise)
     const allTimeMaxWeight = personalRecords[selectedExercise]?.weight || 0;
 
-    // Determine Trader State based on current input
-    const traderState = getTraderState(currentSet.weight, recommendedWeight, allTimeMaxWeight);
-    const traderConfig = TRADER_COLORS[traderState];
+    // Determine performance state based on current input
+    const performanceState = getPerformanceState(currentSet.weight, recommendedWeight, allTimeMaxWeight);
 
-    // Helper to get trader state for a specific set
-    const getSetTraderState = (set) => {
-      return getTraderState(set.weight, recommendedWeight, allTimeMaxWeight);
+    // Helper to get performance state for a specific set
+    const getSetPerformanceState = (set) => {
+      return getPerformanceState(set.weight, recommendedWeight, allTimeMaxWeight);
     };
 
     return (
@@ -1930,10 +1892,10 @@ export default function ProgressiveOverloadTracker() {
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <span className={`w-2 h-2 rounded-full ${
                     currentRecommendation.status === 'progress' ? 'bg-[#00C805]' :
-                    currentRecommendation.status === 'maintain' ? 'bg-amber-400' :
-                    currentRecommendation.status === 'deload' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'maintain' ? 'bg-[#FFD700]' :
+                    currentRecommendation.status === 'deload' ? 'bg-[#FF3B30]' :
                     currentRecommendation.status === 'double_jump' ? 'bg-[#00C805]' :
-                    currentRecommendation.status === 'struggle' ? 'bg-[#FF5200]' :
+                    currentRecommendation.status === 'struggle' ? 'bg-[#FF3B30]' :
                     'bg-gray-400'
                   }`} />
                   <span className={`text-sm uppercase tracking-[0.1em] font-medium ${dm('text-gray-500', 'text-gray-400')}`}>
@@ -1964,8 +1926,7 @@ export default function ProgressiveOverloadTracker() {
             <div className="mt-2 space-y-1 pb-4">
               {pendingSets.map((set, index) => {
                 const setGap = getSetGap(set);
-                const setTraderState = getSetTraderState(set);
-                const setTraderConfig = TRADER_COLORS[setTraderState];
+                const setPerformanceState = getSetPerformanceState(set);
                 return (
                   <div
                     key={index}
@@ -1983,13 +1944,13 @@ export default function ProgressiveOverloadTracker() {
                       <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-400' : dm('text-gray-500', 'text-gray-400')}`}>
                         {set.weight}kg × {set.reps} reps
                       </span>
-                      {/* Trader state badge for this set - percentage only */}
+                      {/* Performance state badge for this set - percentage only */}
                       {setGap !== null && (
                         <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
-                          setTraderState === 'ATH' ? 'bg-[#FFD700]/20 text-[#FFD700]' :
-                          setTraderState === 'ALPHA' ? 'bg-[#00F0FF]/15 text-[#00F0FF]' :
-                          setTraderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15 text-[#00C805]' :
-                          setTraderState === 'UNDERVALUED' ? 'bg-[#F2994A]/15 text-[#F2994A]' :
+                          setPerformanceState === 'ATH' ? 'bg-[#FFD700]/20 text-[#FFD700]' :
+                          setPerformanceState === 'ABOVE' ? 'bg-[#FFD700]/15 text-[#FFD700]' :
+                          setPerformanceState === 'TARGET' ? 'bg-[#00C805]/15 text-[#00C805]' :
+                          setPerformanceState === 'BELOW' ? 'bg-[#FF3B30]/15 text-[#FF3B30]' :
                           dm('bg-gray-100 text-gray-500', 'bg-gray-800 text-gray-400')
                         }`}>
                           {Math.abs(setGap) < 0.05 ? '0.0%' : (
@@ -2030,23 +1991,23 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Trader State Indicator + Add Set Row - Equal width buttons */}
+        {/* Performance State Indicator + Add Set Row - Equal width buttons */}
         <div className="px-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            {/* Trader State Indicator - percentage only with trader colors */}
+            {/* Performance State Indicator - percentage only with core colors */}
             <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
-              traderState === 'ATH' ? 'bg-[#FFD700]/20' :
-              traderState === 'ALPHA' ? 'bg-[#00F0FF]/15' :
-              traderState === 'MARKET_PERFORM' ? 'bg-[#00C805]/15' :
-              traderState === 'UNDERVALUED' ? 'trader-striped' :
+              performanceState === 'ATH' ? 'bg-[#FFD700]/20' :
+              performanceState === 'ABOVE' ? 'bg-[#FFD700]/15' :
+              performanceState === 'TARGET' ? 'bg-[#00C805]/15' :
+              performanceState === 'BELOW' ? 'below-target-striped' :
               (darkMode ? 'bg-gray-800' : 'bg-gray-100')
             }`}>
               {currentSet.weight > 0 && currentOneRM > 0 ? (
                 <span className={`text-lg font-bold ${
-                  traderState === 'ATH' ? 'text-[#FFD700]' :
-                  traderState === 'ALPHA' ? 'text-[#00F0FF]' :
-                  traderState === 'MARKET_PERFORM' ? 'text-[#00C805]' :
-                  traderState === 'UNDERVALUED' ? 'text-[#F2994A]' :
+                  performanceState === 'ATH' ? 'text-[#FFD700]' :
+                  performanceState === 'ABOVE' ? 'text-[#FFD700]' :
+                  performanceState === 'TARGET' ? 'text-[#00C805]' :
+                  performanceState === 'BELOW' ? 'text-[#FF3B30]' :
                   (darkMode ? 'text-gray-400' : 'text-gray-500')
                 }`}>
                   {isZeroGap ? '0.0%' : (
@@ -2151,7 +2112,7 @@ export default function ProgressiveOverloadTracker() {
   if (showRewardScreen && rewardData) {
     // Determine if performance is positive or negative
     const isPositive = rewardData.oneRMChange >= 0;
-    const accentColor = isPositive ? '#00C805' : '#FF5200';
+    const accentColor = isPositive ? '#00C805' : '#FF3B30';
     const isNewPR = rewardData.isNewPR;
 
     // Generate mini sparkline data from session
@@ -2575,7 +2536,7 @@ export default function ProgressiveOverloadTracker() {
               {dataMode === 'demo' && (
                 <button
                   onClick={resetDemo}
-                  className="w-full py-4 text-[#FF5200] font-medium"
+                  className="w-full py-4 text-[#FF3B30] font-medium"
                 >
                   Reset Demo Data
                 </button>
