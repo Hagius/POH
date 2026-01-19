@@ -42,31 +42,19 @@ const COLORS = {
   border: '#E5E7EB',
 };
 
-// Helper function to determine performance state using core colors
-// Returns: 'ATH' (gold), 'ABOVE' (gold), 'TARGET' (accent), 'BELOW' (negative), 'NEUTRAL' (muted)
-const getPerformanceState = (inputWeight, recommendedWeight, allTimeMaxWeight) => {
-  if (!inputWeight || inputWeight <= 0) return 'NEUTRAL';
-
-  // ATH: Input > All-Time Max
-  if (allTimeMaxWeight && inputWeight > allTimeMaxWeight) {
-    return 'ATH';
+// Helper to get color class based on gap percentage
+// positive gap = progress (green), negative gap = negative (red), zero/no data = neutral (gray)
+const getGapColorClass = (gap, type = 'text') => {
+  if (gap === null || gap === undefined) {
+    return type === 'text' ? 'text-[#6B7280]' : 'bg-[#6B7280]/15';
   }
-
-  // Without recommendation, we can only check ATH
-  if (!recommendedWeight) return 'NEUTRAL';
-
-  // Above target but not ATH
-  if (inputWeight > recommendedWeight) {
-    return 'ABOVE';
+  if (Math.abs(gap) < 0.05) {
+    return type === 'text' ? 'text-[#6B7280]' : 'bg-[#6B7280]/15';
   }
-
-  // Exact target (within small tolerance)
-  if (Math.abs(inputWeight - recommendedWeight) < 0.1) {
-    return 'TARGET';
+  if (gap > 0) {
+    return type === 'text' ? 'text-[#00C805]' : 'bg-[#00C805]/15';
   }
-
-  // Below target
-  return 'BELOW';
+  return type === 'text' ? 'text-[#FF3B30]' : 'bg-[#FF3B30]/15';
 };
 
 // CountUp Animation Component for Ticker Effect
@@ -117,24 +105,13 @@ const CountUp = ({ value, duration = 800, prefix = '', suffix = '', decimals = 0
 };
 
 // CSS Keyframes injected once
-const injectTraderStyles = () => {
+const injectAnimationStyles = () => {
   if (typeof document === 'undefined') return;
-  if (document.getElementById('trader-styles')) return;
+  if (document.getElementById('animation-styles')) return;
 
   const style = document.createElement('style');
-  style.id = 'trader-styles';
+  style.id = 'animation-styles';
   style.textContent = `
-    /* Striped/Hashed pattern for below-target state */
-    .below-target-striped {
-      background: repeating-linear-gradient(
-        -45deg,
-        rgba(255, 59, 48, 0.1),
-        rgba(255, 59, 48, 0.1) 4px,
-        rgba(255, 59, 48, 0.2) 4px,
-        rgba(255, 59, 48, 0.2) 8px
-      );
-    }
-
     /* Ticker number animation */
     @keyframes tickerFlash {
       0% { opacity: 1; }
@@ -670,9 +647,9 @@ export default function ProgressiveOverloadTracker() {
     setEntries(getCurrentEntries());
   }, []);
 
-  // Inject trader styles on mount
+  // Inject animation styles on mount
   useEffect(() => {
-    injectTraderStyles();
+    injectAnimationStyles();
   }, []);
 
   // Save entries when they change
@@ -1833,14 +1810,6 @@ export default function ProgressiveOverloadTracker() {
     // Get All-Time High (max weight ever lifted for this exercise)
     const allTimeMaxWeight = personalRecords[selectedExercise]?.weight || 0;
 
-    // Determine performance state based on current input
-    const performanceState = getPerformanceState(currentSet.weight, recommendedWeight, allTimeMaxWeight);
-
-    // Helper to get performance state for a specific set
-    const getSetPerformanceState = (set) => {
-      return getPerformanceState(set.weight, recommendedWeight, allTimeMaxWeight);
-    };
-
     return (
       <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
         {/* Header with Total Volume Ticker */}
@@ -1926,7 +1895,6 @@ export default function ProgressiveOverloadTracker() {
             <div className="mt-2 space-y-1 pb-4">
               {pendingSets.map((set, index) => {
                 const setGap = getSetGap(set);
-                const setPerformanceState = getSetPerformanceState(set);
                 return (
                   <div
                     key={index}
@@ -1944,15 +1912,9 @@ export default function ProgressiveOverloadTracker() {
                       <span className={`ml-2 ${editingSetIndex === index ? 'text-gray-400' : dm('text-gray-500', 'text-gray-400')}`}>
                         {set.weight}kg × {set.reps} reps
                       </span>
-                      {/* Performance state badge for this set - percentage only */}
+                      {/* Gap badge for this set */}
                       {setGap !== null && (
-                        <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${
-                          setPerformanceState === 'ATH' ? 'bg-[#FFD700]/20 text-[#FFD700]' :
-                          setPerformanceState === 'ABOVE' ? 'bg-[#FFD700]/15 text-[#FFD700]' :
-                          setPerformanceState === 'TARGET' ? 'bg-[#00C805]/15 text-[#00C805]' :
-                          setPerformanceState === 'BELOW' ? 'bg-[#FF3B30]/15 text-[#FF3B30]' :
-                          dm('bg-gray-100 text-gray-500', 'bg-gray-800 text-gray-400')
-                        }`}>
+                        <span className={`ml-2 text-xs font-bold px-2 py-0.5 rounded-full ${getGapColorClass(setGap, 'bg')} ${getGapColorClass(setGap, 'text')}`}>
                           {Math.abs(setGap) < 0.05 ? '0.0%' : (
                             <>
                               {setGap > 0 ? '▲+' : '▼'}{setGap > 0 ? '' : ''}{setGap.toFixed(1)}%
@@ -1991,25 +1953,15 @@ export default function ProgressiveOverloadTracker() {
           </div>
         )}
 
-        {/* Performance State Indicator + Add Set Row - Equal width buttons */}
+        {/* Gap Indicator + Add Set Row - Equal width buttons */}
         <div className="px-6 pb-4 flex-shrink-0">
           <div className="flex items-center gap-3">
-            {/* Performance State Indicator - percentage only with core colors */}
+            {/* Gap Indicator - percentage only with core colors */}
             <div className={`flex-1 h-16 flex items-center justify-center gap-2 rounded-full ${
-              performanceState === 'ATH' ? 'bg-[#FFD700]/20' :
-              performanceState === 'ABOVE' ? 'bg-[#FFD700]/15' :
-              performanceState === 'TARGET' ? 'bg-[#00C805]/15' :
-              performanceState === 'BELOW' ? 'below-target-striped' :
-              (darkMode ? 'bg-gray-800' : 'bg-gray-100')
+              currentSet.weight > 0 && currentOneRM > 0 ? getGapColorClass(gapPercent, 'bg') : (darkMode ? 'bg-gray-800' : 'bg-gray-100')
             }`}>
               {currentSet.weight > 0 && currentOneRM > 0 ? (
-                <span className={`text-lg font-bold ${
-                  performanceState === 'ATH' ? 'text-[#FFD700]' :
-                  performanceState === 'ABOVE' ? 'text-[#FFD700]' :
-                  performanceState === 'TARGET' ? 'text-[#00C805]' :
-                  performanceState === 'BELOW' ? 'text-[#FF3B30]' :
-                  (darkMode ? 'text-gray-400' : 'text-gray-500')
-                }`}>
+                <span className={`text-lg font-bold ${getGapColorClass(gapPercent, 'text')}`}>
                   {isZeroGap ? '0.0%' : (
                     <>
                       {gapPercent > 0 ? '▲' : '▼'} {gapPercent > 0 ? '+' : ''}{gapPercent.toFixed(1)}%

@@ -44,7 +44,7 @@ function getAgeMultiplier(age) {
 
 // Level colors for the chart - using core application colors
 export const LEVEL_COLORS = {
-  beginner: { fill: '#FF3B30', stroke: '#FF3B30', label: 'Beginner' },      // Apple System Red (negative)
+  beginner: { fill: '#000000', stroke: '#000000', label: 'Beginner' },      // Black
   intermediate: { fill: '#6B7280', stroke: '#6B7280', label: 'Intermediate' }, // Muted gray
   advanced: { fill: '#00C805', stroke: '#00C805', label: 'Advanced' },      // Accent green
   professional: { fill: '#FFD700', stroke: '#FFD700', label: 'Professional' }, // Gold (rewards)
