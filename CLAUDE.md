@@ -6,8 +6,20 @@
 **Purpose**: Fitness tracking application focused on progressive overload tracking
 **Status**: Early development stage
 **Owner**: Hagius (nicolas@hagius.de)
+**Repository**: https://github.com/Hagius/POH
 
 Progressive overload is a fundamental strength training principle where you gradually increase the stress placed on your body during exercise to continuously improve strength, endurance, and muscle growth.
+
+## Quick Start for AI Assistants
+
+When starting work on this repository:
+
+1. **Verify your branch**: Ensure you're on the correct `claude/*-{sessionId}` branch
+2. **Read existing code**: Always use Read tool before modifying files
+3. **Plan your work**: Use TodoWrite for complex tasks
+4. **Commit frequently**: Make atomic commits with clear messages
+5. **Push carefully**: Use `git push -u origin <branch-name>` with retry logic
+6. **Security first**: Always check for vulnerabilities before committing
 
 ## Repository Structure
 
@@ -40,6 +52,27 @@ As the project develops, the structure should follow these patterns:
 └── .gitignore            # Git ignore patterns
 ```
 
+### Repository Configuration
+
+**Git Configuration**:
+- **Remote Origin**: https://github.com/Hagius/POH
+- **Default Branch**: main (not yet created with content)
+- **Current Working Branch**: `claude/add-claude-documentation-7mSNm`
+- **Commit Signing**: Enabled (SSH-based GPG signing)
+- **Proxy**: Local proxy configured for git operations
+
+**Environment**:
+- **Working Directory**: `/home/user/POH`
+- **Platform**: Linux 4.4.0
+- **Git User**: Claude (Anthropic AI)
+- **Git Email**: noreply@anthropic.com
+
+**Commit History**:
+```
+34c4261 - docs: add comprehensive CLAUDE.md documentation
+6bd1bfe - Initial commit
+```
+
 ## Development Workflows
 
 ### Git Branch Strategy
@@ -54,7 +87,13 @@ As the project develops, the structure should follow these patterns:
 **Important Git Rules**:
 1. **ALWAYS** develop on the designated feature branch
 2. **NEVER** commit directly to main/master without explicit permission
-3. **ALWAYS** use descriptive commit messages following this format:
+3. **Branch names MUST**:
+   - Start with `claude/`
+   - End with matching session ID (e.g., `-7mSNm`)
+   - Follow pattern: `claude/feature-description-{sessionId}`
+   - **CRITICAL**: Pushes to branches not following this pattern will fail with 403 error
+
+4. **ALWAYS** use descriptive commit messages following this format:
    ```
    <type>: <short description>
 
@@ -62,8 +101,37 @@ As the project develops, the structure should follow these patterns:
    ```
    Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
-4. **GPG Signing**: This repository requires GPG-signed commits (configured)
-5. **Push Strategy**: Use `git push -u origin <branch-name>` for initial pushes
+5. **GPG Signing**: This repository requires GPG-signed commits (SSH-based, auto-configured)
+   - Committer: Claude (noreply@anthropic.com)
+   - Signing key: SSH key at `/home/claude/.ssh/commit_signing_key.pub`
+   - All commits are automatically signed
+
+6. **Push Strategy**: Use `git push -u origin <branch-name>` for initial pushes
+
+### Git Operations with Retry Logic
+
+**For git push operations**:
+- ALWAYS use: `git push -u origin <branch-name>`
+- If network errors occur, retry up to 4 times with exponential backoff:
+  - 1st retry: wait 2 seconds
+  - 2nd retry: wait 4 seconds
+  - 3rd retry: wait 8 seconds
+  - 4th retry: wait 16 seconds
+- Only retry on network failures, NOT on authentication/permission errors
+
+**For git fetch/pull operations**:
+- Prefer fetching specific branches: `git fetch origin <branch-name>`
+- Apply same retry logic as push (up to 4 times with exponential backoff)
+- For pulls use: `git pull origin <branch-name>`
+
+**Example retry implementation**:
+```bash
+# Push with retry logic
+for i in 1 2 3 4; do
+  git push -u origin branch-name && break
+  sleep $((2 ** i))
+done
+```
 
 ### Commit Message Guidelines
 
@@ -98,6 +166,38 @@ asdf
 5. **Test**: Ensure changes work as expected
 6. **Commit**: Create clear, atomic commits
 7. **Push**: Push to the designated branch
+
+### Working with Claude Code Tools
+
+This repository is designed to work with Claude Code, which provides specialized tools:
+
+**Essential Tools**:
+- **Read**: Read files before modifying (REQUIRED before using Edit/Write)
+- **Edit**: Make targeted changes to existing files
+- **Write**: Create new files (only when necessary)
+- **Glob**: Find files by pattern (e.g., `**/*.js`)
+- **Grep**: Search code content (supports regex)
+- **Bash**: Execute shell commands (git, npm, test runners, etc.)
+- **TodoWrite**: Track multi-step tasks and show progress
+- **AskUserQuestion**: Clarify requirements when needed
+
+**Tool Usage Guidelines**:
+1. **Always Read First**: Never edit files you haven't read
+2. **Prefer Edit over Write**: Edit existing files rather than creating new ones
+3. **Use TodoWrite for Complex Tasks**: Break down multi-step work
+4. **Parallel Tool Calls**: Make independent tool calls in parallel for efficiency
+5. **No Bash for File Operations**: Use Read/Edit/Write instead of cat/sed/echo
+6. **Search Efficiently**: Use Glob for file patterns, Grep for content
+
+**Example Workflow**:
+```
+1. Read file(s) to understand current state
+2. Use TodoWrite to plan changes
+3. Edit files incrementally
+4. Test changes with Bash
+5. Commit with clear message
+6. Push to designated branch
+```
 
 ## Code Conventions
 
@@ -330,6 +430,42 @@ When working on this project, don't hesitate to ask questions about:
 5. **Data Structure**: How should information be organized?
 6. **Integration**: How does this fit with existing code?
 
+## Troubleshooting
+
+### Common Issues
+
+**Git Push Fails with 403 Error**:
+- **Cause**: Branch name doesn't follow required pattern
+- **Solution**: Ensure branch name starts with `claude/` and ends with session ID
+- **Example**: `claude/add-feature-7mSNm` ✓, `feature/add-feature` ✗
+
+**Network Errors During Push**:
+- **Cause**: Temporary network issues
+- **Solution**: Implement retry logic with exponential backoff (see Git Operations section)
+- **Max retries**: 4 attempts with 2s, 4s, 8s, 16s delays
+
+**Commit Signature Verification Failed**:
+- **Cause**: GPG signing configuration issue
+- **Solution**: This should be auto-configured; verify with `git config --list | grep gpg`
+- **Expected**: SSH-based signing with `/home/claude/.ssh/commit_signing_key.pub`
+
+**File Edit Failed - File Not Read**:
+- **Cause**: Attempting to edit a file without reading it first
+- **Solution**: Always use Read tool before Edit or Write tools
+
+**Cannot Find Files**:
+- **Cause**: Looking for files that don't exist yet in early-stage project
+- **Solution**: Check current repository structure; many directories haven't been created yet
+
+### Getting Help
+
+If you encounter issues not covered here:
+1. Check git status: `git status`
+2. Review recent commits: `git log --oneline -5`
+3. Verify branch: `git branch -a`
+4. Check remote: `git remote -v`
+5. Review configuration: `git config --list`
+
 ## Resources
 
 ### Fitness/Training Resources
@@ -341,6 +477,12 @@ When working on this project, don't hesitate to ask questions about:
 ### Development Resources
 - Project README: `/home/user/POH/README.md`
 - This document: `/home/user/POH/CLAUDE.md`
+- GitHub Repository: https://github.com/Hagius/POH
+
+### Tool Documentation
+- Claude Code tools are context-aware and provide inline help
+- Use tools in parallel when operations are independent
+- Always read files before modifying them
 
 ## Maintenance
 
@@ -351,6 +493,33 @@ This document should be updated when:
 3. **New Workflows**: Development processes are refined
 4. **Major Features**: Significant functionality is added
 5. **Lessons Learned**: Important insights from development
+6. **Repository Structure Changes**: New directories or significant files added
+7. **Git Configuration Changes**: Branch strategies or signing requirements modified
+
+### Update History
+
+**Version 1.1.0** (2026-01-19):
+- Added Quick Start section for AI assistants
+- Enhanced Git Operations section with retry logic details
+- Added strict branch naming requirements (claude/* with session ID)
+- Documented GPG signing configuration (SSH-based)
+- Added Repository Configuration section with environment details
+- Added Working with Claude Code Tools section
+- Added Troubleshooting section with common issues
+- Expanded Resources section
+- Updated commit history
+
+**Version 1.0.0** (2026-01-19):
+- Initial CLAUDE.md creation
+- Project overview and structure documentation
+- Git workflows and conventions
+- Code conventions and testing guidelines
+- AI assistant guidelines
+- Progressive overload domain knowledge
+- Technology stack considerations
+
+---
 
 Last Updated: 2026-01-19
-Version: 1.0.0
+Version: 1.1.0
+Author: Claude (Anthropic AI)
