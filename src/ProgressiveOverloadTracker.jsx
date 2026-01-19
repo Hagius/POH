@@ -878,10 +878,9 @@ export default function ProgressiveOverloadTracker() {
   };
 
   // Get recommendation for exercise using new recommendation engine
-  const getRecommendation = (exerciseName) => {
-    const exerciseHistory = entries
-      .filter((e) => e.name === exerciseName)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Memoized with useCallback to ensure updates when dependencies change
+  const getRecommendation = useCallback((exerciseName) => {
+    if (!exerciseName) return null;
 
     // Generate recommendation using new engine
     const recommendation = generateRecommendation({
@@ -893,7 +892,7 @@ export default function ProgressiveOverloadTracker() {
 
     // Convert to legacy format for UI compatibility
     return toLegacyFormat(recommendation);
-  };
+  }, [entries, user?.age, trainingPhase]);
 
   // Log all sets that have been added to the list
   const logAllSets = () => {
@@ -1713,8 +1712,10 @@ export default function ProgressiveOverloadTracker() {
   // Profile display user (for non-editing mode)
   const profileDisplayUser = user;
 
-  // Get current recommendation for log view
-  const currentRecommendation = selectedExercise ? getRecommendation(selectedExercise) : null;
+  // Get current recommendation for log view - memoized to update on dependency changes
+  const currentRecommendation = useMemo(() => {
+    return selectedExercise ? getRecommendation(selectedExercise) : null;
+  }, [selectedExercise, getRecommendation]);
 
   // Handlers for log view
   const handleWeightChange = (v) => setCurrentSet((prev) => ({ ...prev, weight: v }));
