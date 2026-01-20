@@ -1881,15 +1881,18 @@ export default function ProgressiveOverloadTracker() {
       ? calculate1RM(currentRecommendation.nextWorkout.weight, currentRecommendation.nextWorkout.targetReps)
       : 0;
 
-    // Calculate gap percentage based on 1RM vs recommended 1RM
-    const gapPercent = recommendedOneRM > 0 ? ((currentOneRM - recommendedOneRM) / recommendedOneRM * 100) : 0;
-    const isZeroGap = recommendedOneRM > 0 && currentOneRM > 0 && Math.abs(gapPercent) < 0.05;
+    // Get last session's 1RM for comparison
+    const lastSession1RM = selectedExercise ? getLastSession1RM(selectedExercise) : 0;
 
-    // Helper to calculate gap for a specific set (vs recommended 1RM)
+    // Calculate gap percentage based on 1RM vs last session's 1RM
+    const gapPercent = lastSession1RM > 0 ? ((currentOneRM - lastSession1RM) / lastSession1RM * 100) : 0;
+    const isZeroGap = lastSession1RM > 0 && currentOneRM > 0 && Math.abs(gapPercent) < 0.05;
+
+    // Helper to calculate gap for a specific set (vs last session's 1RM)
     const getSetGap = (set) => {
       const setOneRM = calculate1RM(set.weight, set.reps);
-      if (recommendedOneRM <= 0) return null;
-      return ((setOneRM - recommendedOneRM) / recommendedOneRM * 100);
+      if (lastSession1RM <= 0) return null;
+      return ((setOneRM - lastSession1RM) / lastSession1RM * 100);
     };
 
     // Check if weight and reps match recommendation

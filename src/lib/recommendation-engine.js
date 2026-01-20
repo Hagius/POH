@@ -629,13 +629,19 @@ export function generateRecommendation(request) {
     if (hitTop && rirAtOrBelowTarget) {
       // Increase load, reset to bottom of rep range
       prescribedWeight = roundToIncrement(lastWeight + exerciseConfig.load_increment);
-      rationale = `Hit ${phaseConfig.rep_max} reps at RIR ${lastRIR ?? '~2'}. Increasing load by ${exerciseConfig.load_increment}kg.`;
+      const prescribedE1RM = calculateE1RM(prescribedWeight, phaseConfig.rep_min, phaseConfig.rir_target);
+      const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
+      const changePercent = lastE1RM > 0 ? ((prescribedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+      rationale = `Hit ${phaseConfig.rep_max} reps at RIR ${lastRIR ?? '~2'}. Increasing load by ${exerciseConfig.load_increment}kg (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}% est. 1RM change).`;
       targetReps = phaseConfig.rep_min; // Start at bottom of range with new weight
     } else {
       // Keep weight, target +1 rep
       prescribedWeight = lastWeight > 0 ? lastWeight : prescribedWeight;
       targetReps = lastEntry ? Math.min(lastEntry.reps + 1, phaseConfig.rep_max) : null;
-      rationale = `Progress continues. Aim for ${targetReps} reps per set.`;
+      const prescribedE1RM = targetReps ? calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target) : 0;
+      const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
+      const changePercent = lastE1RM > 0 ? ((prescribedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+      rationale = `Progress continues. Aim for ${targetReps} reps per set (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}% est. 1RM change).`;
     }
   } else if (trainingStatus === 'plateau') {
     const isPlateau = detectPlateau(activeHistory);
@@ -644,34 +650,44 @@ export function generateRecommendation(request) {
       // Simple plateau count based on consecutive sessions at same weight
       const plateauCount = activeHistory.filter(e => e.weight === lastWeight).length;
       const strategy = getPlateauStrategy(exercise, plateauCount);
+      const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
 
       switch (strategy) {
         case 'micro_load':
           prescribedWeight = roundToIncrement(lastWeight + (exerciseConfig.load_increment / 2));
-          rationale = `Plateau detected. Applying micro-load: +${exerciseConfig.load_increment / 2}kg.`;
           targetReps = phaseConfig.rep_min; // Start at bottom with new weight
+          const microLoadE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+          const microLoadChange = lastE1RM > 0 ? ((microLoadE1RM - lastE1RM) / lastE1RM * 100) : 0;
+          rationale = `Plateau detected. Applying micro-load: +${exerciseConfig.load_increment / 2}kg (${microLoadChange > 0 ? '+' : ''}${microLoadChange.toFixed(1)}% est. 1RM change).`;
           break;
         case 'add_set':
           // Note: sets already calculated, this is a suggestion
           prescribedWeight = lastWeight;
-          rationale = `Plateau detected. Consider adding 1 set to increase volume.`;
+          rationale = `Plateau detected. Consider adding 1 set to increase volume (0.0% est. 1RM change).`;
           break;
         case 'extend_rep_ceiling':
           prescribedWeight = lastWeight;
           targetReps = phaseConfig.rep_max + 2;
-          rationale = `Plateau detected. Extending rep ceiling. Aim for ${targetReps} reps.`;
+          const extendedE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+          const extendedChange = lastE1RM > 0 ? ((extendedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+          rationale = `Plateau detected. Extending rep ceiling. Aim for ${targetReps} reps (${extendedChange > 0 ? '+' : ''}${extendedChange.toFixed(1)}% est. 1RM change).`;
           break;
         case 'reset':
           prescribedWeight = roundToIncrement(lastWeight * 0.9);
-          rationale = `Plateau detected. Resetting: reduce weight 10%, rebuild.`;
           targetReps = phaseConfig.rep_max; // Aim for top of range with reduced weight
+          const resetE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+          const resetChange = lastE1RM > 0 ? ((resetE1RM - lastE1RM) / lastE1RM * 100) : 0;
+          rationale = `Plateau detected. Resetting: reduce weight 10%, rebuild (${resetChange.toFixed(1)}% est. 1RM change).`;
           break;
       }
       flags.push('plateau_strategy_applied');
     } else {
       prescribedWeight = lastWeight > 0 ? lastWeight : prescribedWeight;
       targetReps = lastEntry ? Math.min(lastEntry.reps + 1, phaseConfig.rep_max) : null;
-      rationale = `Stable performance. Push for ${targetReps || 'more'} reps to break through.`;
+      const stableE1RM = targetReps ? calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target) : 0;
+      const lastE1RM = calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir);
+      const stableChange = lastE1RM > 0 ? ((stableE1RM - lastE1RM) / lastE1RM * 100) : 0;
+      rationale = `Stable performance. Push for ${targetReps || 'more'} reps to break through (${stableChange > 0 ? '+' : ''}${stableChange.toFixed(1)}% est. 1RM change).`;
     }
   } else if (trainingStatus === 'regressing') {
     // Reduce sets by 50%, intensity to 75% of working weight
@@ -717,17 +733,23 @@ export function generateRecommendation(request) {
         // Hit top of rep range - increase weight
         prescribedWeight = roundToIncrement(lastWeight + exerciseConfig.load_increment);
         targetReps = phaseConfig.rep_min;
-        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Increasing weight to ${prescribedWeight}kg, aim for ${targetReps} reps.`;
+        const prescribedE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+        const changePercent = lastE1RM > 0 ? ((prescribedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Increasing weight to ${prescribedWeight}kg, aim for ${targetReps} reps (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}% est. 1RM change).`;
       } else if (lastEntry.reps >= phaseConfig.rep_min) {
         // In rep range - aim for +1 rep
         prescribedWeight = lastWeight;
         targetReps = Math.min(lastEntry.reps + 1, phaseConfig.rep_max);
-        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Aim for ${targetReps} reps.`;
+        const prescribedE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+        const changePercent = lastE1RM > 0 ? ((prescribedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Aim for ${targetReps} reps (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}% est. 1RM change).`;
       } else {
         // Below rep range - consolidate at same weight
         prescribedWeight = lastWeight;
         targetReps = phaseConfig.rep_min;
-        rationale = `Consolidating at ${lastWeight}kg. Target ${targetReps} reps to reach training range.`;
+        const prescribedE1RM = calculateE1RM(prescribedWeight, targetReps, phaseConfig.rir_target);
+        const changePercent = lastE1RM > 0 ? ((prescribedE1RM - lastE1RM) / lastE1RM * 100) : 0;
+        rationale = `Consolidating at ${lastWeight}kg. Target ${targetReps} reps to reach training range (${changePercent > 0 ? '+' : ''}${changePercent.toFixed(1)}% est. 1RM change).`;
       }
       flags.push('progressive_loading_from_recent_session');
     } else {
