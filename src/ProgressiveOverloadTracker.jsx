@@ -1314,8 +1314,21 @@ export default function ProgressiveOverloadTracker() {
                 // Calculate progress within this level
                 let progressPercent = 0;
                 if (isCurrentLevel && currentOneRM > 0) {
-                  const lowerBound = index === 0 ? 0 : strengthThresholds[levels[index - 1].key];
-                  const upperBound = threshold;
+                  // Each level starts at its own threshold and goes to the next level's threshold
+                  let lowerBound, upperBound;
+                  if (level.key === 'beginner') {
+                    lowerBound = 0;
+                    upperBound = strengthThresholds.intermediate;
+                  } else if (level.key === 'intermediate') {
+                    lowerBound = strengthThresholds.intermediate;
+                    upperBound = strengthThresholds.advanced;
+                  } else if (level.key === 'advanced') {
+                    lowerBound = strengthThresholds.advanced;
+                    upperBound = strengthThresholds.professional;
+                  } else if (level.key === 'professional') {
+                    lowerBound = strengthThresholds.professional;
+                    upperBound = strengthThresholds.professional * 1.2;
+                  }
                   progressPercent = Math.min(100, Math.max(0, ((currentOneRM - lowerBound) / (upperBound - lowerBound)) * 100));
                 }
 

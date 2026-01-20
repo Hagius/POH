@@ -116,27 +116,27 @@ export function getLevelProgress(oneRM, thresholds) {
   switch (level) {
     case 'beginner':
       lowerBound = 0;
-      upperBound = thresholds.beginner;
+      upperBound = thresholds.intermediate; // Beginner goes from 0 to intermediate threshold
       nextLevel = 'intermediate';
       break;
     case 'intermediate':
-      lowerBound = thresholds.beginner;
-      upperBound = thresholds.intermediate;
+      lowerBound = thresholds.intermediate; // Intermediate starts at intermediate threshold
+      upperBound = thresholds.advanced; // and goes to advanced threshold
       nextLevel = 'advanced';
       break;
     case 'advanced':
-      lowerBound = thresholds.intermediate;
-      upperBound = thresholds.advanced;
+      lowerBound = thresholds.advanced; // Advanced starts at advanced threshold
+      upperBound = thresholds.professional; // and goes to professional threshold
       nextLevel = 'professional';
       break;
     case 'professional':
-      lowerBound = thresholds.advanced;
+      lowerBound = thresholds.professional; // Professional starts at professional threshold
       upperBound = thresholds.professional * 1.2; // Allow for beyond professional
       nextLevel = null;
       break;
     default:
       lowerBound = 0;
-      upperBound = thresholds.beginner;
+      upperBound = thresholds.intermediate;
       nextLevel = 'intermediate';
   }
 
