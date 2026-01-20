@@ -15,6 +15,7 @@
  * @property {Object} prescription
  * @property {number} prescription.sets
  * @property {string|number} prescription.reps
+ * @property {number|null} prescription.target_reps - Specific target reps (when doing rep progression)
  * @property {number|null} prescription.weight_kg
  * @property {string} prescription.rest_seconds
  * @property {number} prescription.rir_target
@@ -387,6 +388,7 @@ function buildReasoningBreakdown({
   lastEntry,
   trainingStatus,
   prescribedWeight,
+  targetReps,
   phaseConfig,
   exerciseConfig,
   currentE1RM,
@@ -419,20 +421,37 @@ function buildReasoningBreakdown({
   if (trainingStatus === 'progressing') {
     if (lastEntry.reps >= phaseConfig.rep_max) {
       nextStep = `You hit ${phaseConfig.rep_max} reps. Time to increase weight by ${exerciseConfig.load_increment}kg.`;
+    } else if (targetReps) {
+      nextStep = `Keep pushing for more reps. Target ${targetReps} reps this session.`;
     } else {
       nextStep = `Keep pushing for more reps. Target ${Math.min(lastEntry.reps + 1, phaseConfig.rep_max)} reps this session.`;
     }
   } else if (trainingStatus === 'plateau') {
-    nextStep = 'Break through the plateau by focusing on rep quality and progressive volume.';
+    if (targetReps) {
+      nextStep = `Break through the plateau by aiming for ${targetReps} reps.`;
+    } else {
+      nextStep = 'Break through the plateau by focusing on rep quality and progressive volume.';
+    }
   } else if (trainingStatus === 'regressing') {
     nextStep = 'Take a deload week to recover. Reduce intensity and volume.';
   } else {
-    nextStep = 'Build momentum with consistent training.';
+    if (targetReps) {
+      nextStep = `Build momentum by targeting ${targetReps} reps consistently.`;
+    } else {
+      nextStep = 'Build momentum with consistent training.';
+    }
   }
 
-  const calculation = prescribedWeight
-    ? `${prescribedWeight}kg = ${lastEntry.weight}kg${prescribedWeight > lastEntry.weight ? ` + ${exerciseConfig.load_increment}kg increment` : ' (maintain weight, add reps)'}`
-    : 'Weight to be determined based on your starting point';
+  let calculation = 'Weight to be determined based on your starting point';
+  if (prescribedWeight) {
+    if (prescribedWeight > lastEntry.weight) {
+      calculation = `${prescribedWeight}kg = ${lastEntry.weight}kg + ${exerciseConfig.load_increment}kg increment`;
+    } else if (targetReps) {
+      calculation = `${prescribedWeight}kg × ${targetReps} reps (maintain weight, aim for ${targetReps} reps)`;
+    } else {
+      calculation = `${prescribedWeight}kg (maintain weight, add reps)`;
+    }
+  }
 
   return {
     last_session: lastSessionDesc,
@@ -491,6 +510,7 @@ export function generateRecommendation(request) {
         lastEntry: null,
         trainingStatus: 'insufficient_data',
         prescribedWeight: null,
+        targetReps: null,
         phaseConfig,
         exerciseConfig,
         currentE1RM: 0,
@@ -549,6 +569,7 @@ export function generateRecommendation(request) {
         lastEntry,
         trainingStatus: 'insufficient_data',
         prescribedWeight: adjustedWeight,
+        targetReps: null,
         phaseConfig,
         exerciseConfig,
         currentE1RM,
@@ -594,6 +615,7 @@ export function generateRecommendation(request) {
   }
 
   let rationale = '';
+  let targetReps = null; // Specific target reps (when doing rep progression)
 
   // =========================================================================
   // Apply progression logic based on training status
@@ -608,10 +630,12 @@ export function generateRecommendation(request) {
       // Increase load, reset to bottom of rep range
       prescribedWeight = roundToIncrement(lastWeight + exerciseConfig.load_increment);
       rationale = `Hit ${phaseConfig.rep_max} reps at RIR ${lastRIR ?? '~2'}. Increasing load by ${exerciseConfig.load_increment}kg.`;
+      targetReps = phaseConfig.rep_min; // Start at bottom of range with new weight
     } else {
       // Keep weight, target +1 rep
       prescribedWeight = lastWeight > 0 ? lastWeight : prescribedWeight;
-      rationale = 'Progress continues. Aim for +1 rep per set.';
+      targetReps = lastEntry ? Math.min(lastEntry.reps + 1, phaseConfig.rep_max) : null;
+      rationale = `Progress continues. Aim for ${targetReps} reps per set.`;
     }
   } else if (trainingStatus === 'plateau') {
     const isPlateau = detectPlateau(activeHistory);
@@ -625,23 +649,29 @@ export function generateRecommendation(request) {
         case 'micro_load':
           prescribedWeight = roundToIncrement(lastWeight + (exerciseConfig.load_increment / 2));
           rationale = `Plateau detected. Applying micro-load: +${exerciseConfig.load_increment / 2}kg.`;
+          targetReps = phaseConfig.rep_min; // Start at bottom with new weight
           break;
         case 'add_set':
           // Note: sets already calculated, this is a suggestion
+          prescribedWeight = lastWeight;
           rationale = `Plateau detected. Consider adding 1 set to increase volume.`;
           break;
         case 'extend_rep_ceiling':
-          rationale = `Plateau detected. Extending rep ceiling by 2. Aim for ${phaseConfig.rep_max + 2} reps.`;
+          prescribedWeight = lastWeight;
+          targetReps = phaseConfig.rep_max + 2;
+          rationale = `Plateau detected. Extending rep ceiling. Aim for ${targetReps} reps.`;
           break;
         case 'reset':
           prescribedWeight = roundToIncrement(lastWeight * 0.9);
           rationale = `Plateau detected. Resetting: reduce weight 10%, rebuild.`;
+          targetReps = phaseConfig.rep_max; // Aim for top of range with reduced weight
           break;
       }
       flags.push('plateau_strategy_applied');
     } else {
       prescribedWeight = lastWeight > 0 ? lastWeight : prescribedWeight;
-      rationale = 'Stable performance. Push for more reps to break through.';
+      targetReps = lastEntry ? Math.min(lastEntry.reps + 1, phaseConfig.rep_max) : null;
+      rationale = `Stable performance. Push for ${targetReps || 'more'} reps to break through.`;
     }
   } else if (trainingStatus === 'regressing') {
     // Reduce sets by 50%, intensity to 75% of working weight
@@ -668,6 +698,7 @@ export function generateRecommendation(request) {
         lastEntry,
         trainingStatus,
         prescribedWeight,
+        targetReps: null, // Deload shows range, not specific target
         phaseConfig,
         exerciseConfig,
         currentE1RM,
@@ -685,15 +716,18 @@ export function generateRecommendation(request) {
       if (lastEntry.reps >= phaseConfig.rep_max && rirAtOrBelowTarget) {
         // Hit top of rep range - increase weight
         prescribedWeight = roundToIncrement(lastWeight + exerciseConfig.load_increment);
-        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Increasing weight to ${prescribedWeight}kg.`;
+        targetReps = phaseConfig.rep_min;
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Increasing weight to ${prescribedWeight}kg, aim for ${targetReps} reps.`;
       } else if (lastEntry.reps >= phaseConfig.rep_min) {
         // In rep range - aim for +1 rep
         prescribedWeight = lastWeight;
-        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Aim for ${Math.min(lastEntry.reps + 1, phaseConfig.rep_max)} reps.`;
+        targetReps = Math.min(lastEntry.reps + 1, phaseConfig.rep_max);
+        rationale = `Building on last session (${lastWeight}kg × ${lastEntry.reps}). Aim for ${targetReps} reps.`;
       } else {
         // Below rep range - consolidate at same weight
         prescribedWeight = lastWeight;
-        rationale = `Consolidating at ${lastWeight}kg. Target ${phaseConfig.rep_min}-${phaseConfig.rep_max} reps.`;
+        targetReps = phaseConfig.rep_min;
+        rationale = `Consolidating at ${lastWeight}kg. Target ${targetReps} reps to reach training range.`;
       }
       flags.push('progressive_loading_from_recent_session');
     } else {
@@ -713,6 +747,7 @@ export function generateRecommendation(request) {
     prescription: {
       sets: adjustedSets,
       reps: phaseConfig.rep_range,
+      target_reps: targetReps, // Specific target when doing rep progression
       weight_kg: prescribedWeight,
       rest_seconds: phaseConfig.rest_seconds,
       rir_target: rirTarget
@@ -726,6 +761,7 @@ export function generateRecommendation(request) {
       lastEntry,
       trainingStatus,
       prescribedWeight,
+      targetReps,
       phaseConfig,
       exerciseConfig,
       currentE1RM,
@@ -748,9 +784,12 @@ export function generateRecommendation(request) {
 export function toLegacyFormat(recommendation) {
   if (!recommendation) return null;
 
-  // Parse rep range to get target reps
+  // Use specific target_reps if available, otherwise parse rep range
   let targetReps = 8;
-  if (typeof recommendation.prescription.reps === 'string') {
+  if (recommendation.prescription.target_reps) {
+    // Use the specific target when doing rep progression
+    targetReps = recommendation.prescription.target_reps;
+  } else if (typeof recommendation.prescription.reps === 'string') {
     const match = recommendation.prescription.reps.match(/(\d+)-(\d+)/);
     if (match) {
       targetReps = parseInt(match[1]); // Use bottom of range
