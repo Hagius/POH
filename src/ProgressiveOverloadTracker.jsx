@@ -27,6 +27,8 @@ import {
   generateRecommendation,
   toLegacyFormat,
   PHASE_CONFIG,
+  analyzeBenchmarkSession,
+  calculateE1RM,
 } from './lib/recommendation-engine';
 
 // Design Tokens - Core Application Colors
@@ -603,6 +605,10 @@ export default function ProgressiveOverloadTracker() {
   const [showRewardScreen, setShowRewardScreen] = useState(false);
   const [rewardData, setRewardData] = useState(null);
 
+  // Benchmark intro screen state
+  const [showBenchmarkIntro, setShowBenchmarkIntro] = useState(false);
+  const [benchmarkExercise, setBenchmarkExercise] = useState(null);
+
   // Dark mode state
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -902,19 +908,59 @@ export default function ProgressiveOverloadTracker() {
     });
     const legacyNextRec = toLegacyFormat(nextRecommendation);
 
-    // Store reward data
-    setRewardData({
-      exerciseName: selectedExercise,
-      accomplishmentType,
-      totalVolume,
-      setsCount: allSets.length,
-      sessionBest1RM,
-      previousBest1RM,
-      oneRMChange,
-      isNewPR: sessionBest1RM > currentPR && currentPR > 0,
-      nextGoal: legacyNextRec?.nextWorkout || null,
-      recommendation: legacyNextRec,
-    });
+    // Check if this was a benchmark session (first ever session for this exercise)
+    const wasBenchmark = exerciseHistory.length === 0;
+
+    if (wasBenchmark) {
+      // This was the benchmark session - create special reward data
+      const benchmarkHistory = allSets.map(set => ({
+        date: new Date().toISOString().split('T')[0],
+        weight: set.weight,
+        reps: set.reps,
+        rir: 2, // Assume default RIR for benchmark
+        isActive: true
+      }));
+
+      const benchmarkAnalysis = analyzeBenchmarkSession(benchmarkHistory, selectedExercise);
+
+      // Calculate e1RM for all sets
+      const allSetsWithE1RM = allSets.map(set => ({
+        weight: set.weight,
+        reps: set.reps,
+        e1rm: calculateE1RM(set.weight, set.reps, 2)
+      }));
+
+      setRewardData({
+        exerciseName: selectedExercise,
+        isBenchmark: true,
+        sessionBest1RM: benchmarkAnalysis.highestE1RM,
+        previousBest1RM: 0,
+        oneRMChange: null,
+        isNewPR: true, // First session is always a PR
+        totalVolume,
+        setsCount: allSets.length,
+        accomplishmentType: 'benchmark_complete',
+        recommendation: legacyNextRec,
+        nextGoal: legacyNextRec?.nextWorkout || null,
+        phase: trainingPhase,
+        bestSet: benchmarkAnalysis.bestSet,
+        allSetsData: allSetsWithE1RM
+      });
+    } else {
+      // Normal session - use existing reward logic
+      setRewardData({
+        exerciseName: selectedExercise,
+        accomplishmentType,
+        totalVolume,
+        setsCount: allSets.length,
+        sessionBest1RM,
+        previousBest1RM,
+        oneRMChange,
+        isNewPR: sessionBest1RM > currentPR && currentPR > 0,
+        nextGoal: legacyNextRec?.nextWorkout || null,
+        recommendation: legacyNextRec,
+      });
+    }
 
     const today = new Date().toISOString().split('T')[0];
     const newEntries = allSets.map(set => ({
@@ -981,8 +1027,18 @@ export default function ProgressiveOverloadTracker() {
 
   // Open log view with initial values from recommendation
   const openLogView = (exerciseName) => {
-    setSelectedExercise(exerciseName);
     const recommendation = getRecommendation(exerciseName);
+
+    // Check if this is a benchmark session
+    if (recommendation?.benchmark_mode === true) {
+      // Show motivational intro first
+      setBenchmarkExercise(exerciseName);
+      setShowBenchmarkIntro(true);
+      return;  // Don't open log view yet
+    }
+
+    // Normal flow continues...
+    setSelectedExercise(exerciseName);
     if (recommendation) {
       setCurrentSet({
         weight: recommendation.nextWorkout.weight,
@@ -1932,8 +1988,62 @@ export default function ProgressiveOverloadTracker() {
           <div className="w-6" />
         </div>
 
+        {/* Benchmark Mode Banner */}
+        {currentRecommendation?.benchmark_mode && (
+          <div className="bg-[#FFD700] border-4 border-black px-6 py-4 mx-6 mt-4 rounded-xl">
+            <div className="flex items-center">
+              <div className="text-3xl mr-3">🎯</div>
+              <div className="flex-1">
+                <div className="font-extrabold text-lg uppercase tracking-wide text-black">Benchmark Mode Active</div>
+                <div className="text-sm font-medium text-black/80 mt-0.5">
+                  Log 3-5 sets at different weights. Your best set will be your baseline.
+                </div>
+              </div>
+            </div>
+
+            {/* Progress indicator */}
+            {pendingSets.length > 0 && (
+              <div className="mt-3">
+                <div className="flex justify-between text-xs font-bold mb-1.5 text-black/80">
+                  <span>Sets logged: {pendingSets.length}/5</span>
+                  <span>{pendingSets.length >= 3 ? '✓ Ready to finish' : `${3 - pendingSets.length} more recommended`}</span>
+                </div>
+                <div className="w-full bg-black/20 rounded-full h-2.5 border-2 border-black">
+                  <div
+                    className="bg-black rounded-full h-full transition-all duration-300"
+                    style={{ width: `${Math.min((pendingSets.length / 5) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Benchmark Instructions */}
+        {pendingSets.length === 0 && currentRecommendation?.benchmark_mode && !isEditing && (
+          <div className="px-6 py-6 flex-1 flex flex-col justify-center">
+            <div className={`${dm('bg-gray-50', 'bg-gray-900')} border-2 ${dm('border-gray-200', 'border-gray-800')} rounded-2xl p-6`}>
+              <div className={`text-sm font-extrabold ${dm('text-black', 'text-white')} uppercase tracking-wide mb-4`}>
+                Benchmark Instructions
+              </div>
+              <div className="space-y-3">
+                {currentRecommendation.prescription.benchmark_instructions.instructions.map((inst, idx) => (
+                  <div key={idx} className="flex items-start text-sm">
+                    <span className="text-[#FFD700] mr-2 font-bold text-lg">•</span>
+                    <span className={`${dm('text-gray-700', 'text-gray-300')} font-medium leading-relaxed`}>{inst}</span>
+                  </div>
+                ))}
+              </div>
+              <div className={`text-xs ${dm('text-gray-500', 'text-gray-400')} mt-4 font-medium flex items-start`}>
+                <span className="mr-1">💡</span>
+                <span>Tip: Start lighter than you think, then increase weight each set</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Comprehensive Recommendation - shown when no sets logged yet */}
-        {pendingSets.length === 0 && currentRecommendation && !isEditing && (
+        {pendingSets.length === 0 && currentRecommendation && !isEditing && !currentRecommendation.benchmark_mode && (
           <div className="px-6 py-6 flex-1 flex flex-col justify-center">
             <div className="text-center">
               <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>
@@ -2152,6 +2262,259 @@ export default function ProgressiveOverloadTracker() {
               darkMode={darkMode}
             />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Benchmark Intro Screen - Motivational Pre-Session Screen
+  if (showBenchmarkIntro && benchmarkExercise) {
+    const recommendation = getRecommendation(benchmarkExercise);
+    const muscleIcon = MUSCLE_ICONS[benchmarkExercise] || MUSCLE_ICONS['Squat'];
+
+    return (
+      <div className={`fixed inset-0 z-50 ${dm('bg-white', 'bg-black')} overflow-y-auto`}>
+        {/* Header */}
+        <div className={`sticky top-0 z-10 backdrop-blur-lg ${dm('bg-white/90 border-gray-100', 'bg-black/90 border-gray-800')} border-b px-6 py-4`}>
+          <button
+            onClick={() => {
+              setShowBenchmarkIntro(false);
+              setBenchmarkExercise(null);
+            }}
+            className={`text-2xl font-bold ${dm('text-black', 'text-white')}`}
+          >
+            ←
+          </button>
+        </div>
+
+        <div className="px-6 pb-8 max-w-md mx-auto">
+          {/* Hero Icon */}
+          <div className="text-center mt-12 mb-8">
+            <div className={`text-8xl mb-4 ${dm('text-gray-400', 'text-gray-500')}`}>
+              {muscleIcon}
+            </div>
+            <h1 className={`text-4xl font-extrabold mb-2 ${dm('text-black', 'text-white')} leading-tight`}>
+              Let's Find Your<br />Starting Point!
+            </h1>
+            <p className={`text-lg font-medium ${dm('text-gray-500', 'text-gray-400')}`}>
+              {benchmarkExercise}
+            </p>
+          </div>
+
+          {/* Explanation Card - Bold Neo-Brutalism */}
+          <div className={`border-4 ${dm('bg-[#FFF8E7] border-[#FFD700]', 'bg-[#332200] border-[#FFD700]')} rounded-2xl p-6 mb-6`}>
+            <h2 className={`text-xl font-extrabold mb-3 uppercase tracking-wide ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+              📊 What's a Benchmark?
+            </h2>
+            <p className={`text-sm leading-relaxed font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
+              This is your <strong>calibration workout</strong>. You'll perform 3-5 sets at different weights to discover your working capacity. Your best set becomes your baseline for future recommendations.
+            </p>
+          </div>
+
+          {/* Instructions - Clean Boxes */}
+          <div className={`${dm('bg-gray-50', 'bg-gray-900')} border-2 ${dm('border-gray-200', 'border-gray-800')} rounded-2xl p-6 mb-6`}>
+            <h3 className={`text-lg font-extrabold mb-4 uppercase tracking-wide ${dm('text-black', 'text-white')}`}>
+              🎯 How It Works
+            </h3>
+
+            {recommendation?.prescription?.benchmark_instructions?.instructions.map((instruction, idx) => (
+              <div key={idx} className="flex items-start mb-4 last:mb-0">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#00C805] text-white flex items-center justify-center font-extrabold text-sm mr-3 border-2 border-black">
+                  {idx + 1}
+                </div>
+                <p className={`text-sm leading-relaxed pt-1 font-medium ${dm('text-gray-700', 'text-gray-300')}`}>
+                  {instruction}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Motivation Box - Bold Accent */}
+          <div className="bg-[#00C805] border-4 border-black rounded-2xl p-6 mb-8 text-black">
+            <div className="text-3xl mb-3">🚀</div>
+            <h3 className="text-xl font-extrabold mb-2 uppercase tracking-wide">
+              Your Journey Starts Here
+            </h3>
+            <p className="text-sm leading-relaxed font-medium">
+              Every champion started with a first lift. This benchmark is the foundation of your progressive overload journey. Be honest, be safe, and let's discover what you're capable of!
+            </p>
+          </div>
+
+          {/* CTA Button - Bold Neo-Brutalism */}
+          <button
+            onClick={() => {
+              // User is ready to start benchmark
+              setShowBenchmarkIntro(false);
+
+              // Now open the log view
+              setSelectedExercise(benchmarkExercise);
+              setCurrentSet({
+                weight: 20,
+                reps: 8,
+              });
+              setPendingSets([]);
+              setShowLogView(true);
+            }}
+            className={`w-full h-16 font-extrabold text-xl rounded-full border-4 transition-transform active:scale-95 ${dm('bg-black text-white border-black', 'bg-white text-black border-white')}`}
+          >
+            Start Benchmark Session
+          </button>
+
+          {/* Skip Option */}
+          <button
+            onClick={() => {
+              setShowBenchmarkIntro(false);
+              setBenchmarkExercise(null);
+            }}
+            className={`w-full mt-4 py-3 text-sm font-medium ${dm('text-gray-500', 'text-gray-400')} hover:underline`}
+          >
+            I'll do this later
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Benchmark Reward Screen - Special celebration for first session
+  if (showRewardScreen && rewardData?.isBenchmark) {
+    const muscleIcon = MUSCLE_ICONS[rewardData.exerciseName] || MUSCLE_ICONS['Squat'];
+    const baseline1RM = rewardData.sessionBest1RM || 0;
+    const totalSets = rewardData.setsCount || 0;
+    const allSets = rewardData.allSetsData || [];
+    const bestSet = rewardData.bestSet || {};
+
+    return (
+      <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')} overflow-y-auto`}>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+          {/* Celebration Animation */}
+          <div className="text-center mb-8">
+            <div className="text-9xl mb-4">🎉</div>
+            <h1 className={`text-5xl font-extrabold mb-3 leading-tight ${dm('text-black', 'text-white')}`}>
+              Baseline<br />Established!
+            </h1>
+            <p className={`text-xl font-bold ${dm('text-gray-500', 'text-gray-400')}`}>
+              {rewardData.exerciseName}
+            </p>
+          </div>
+
+          {/* Main Stats Card - Bold Neo-Brutalism */}
+          <div className={`border-4 ${dm('bg-white border-black', 'bg-black border-white')} rounded-3xl p-8 mb-6 w-full max-w-md`}>
+            {/* Baseline 1RM Hero */}
+            <div className={`text-center mb-6 pb-6 border-b-2 ${dm('border-gray-200', 'border-gray-800')}`}>
+              <div className={`text-sm font-extrabold uppercase tracking-wide mb-2 ${dm('text-[#FFD700]', 'text-[#FFD700]')}`}>
+                Your Baseline e1RM
+              </div>
+              <div className={`text-7xl font-extrabold mb-2 ${dm('text-black', 'text-white')}`}>
+                {baseline1RM.toFixed(1)}
+                <span className="text-4xl ml-2">kg</span>
+              </div>
+              <div className={`flex items-center justify-center gap-2 text-sm ${dm('text-gray-500', 'text-gray-400')} font-medium`}>
+                <span className={dm('text-gray-400', 'text-gray-500')}>{muscleIcon}</span>
+                <span>From {totalSets} benchmark sets</span>
+              </div>
+            </div>
+
+            {/* Best Set Detail */}
+            <div className={`border-2 ${dm('bg-[#E6F9E6] border-[#00C805]', 'bg-[#002200] border-[#00C805]')} rounded-2xl p-4 mb-6`}>
+              <div className="text-center">
+                <div className={`text-sm font-extrabold uppercase tracking-wide mb-2 ${dm('text-[#00C805]', 'text-[#00C805]')}`}>
+                  🏆 Your Best Set
+                </div>
+                <div className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  {bestSet.weight}kg × {bestSet.reps} reps
+                </div>
+                {bestSet.rir !== undefined && (
+                  <div className={`text-xs ${dm('text-gray-500', 'text-gray-400')} mt-1 font-medium`}>
+                    RIR: {bestSet.rir}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* All Sets Breakdown */}
+            <div className="mb-6">
+              <div className={`text-xs font-extrabold uppercase tracking-wide mb-3 ${dm('text-gray-400', 'text-gray-500')}`}>
+                All Sets ({totalSets})
+              </div>
+              <div className="space-y-2">
+                {allSets.map((set, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between p-3 rounded-lg border-2 ${
+                      set.weight === bestSet.weight && set.reps === bestSet.reps
+                        ? dm('bg-[#FFD700]/10 border-[#FFD700]', 'bg-[#FFD700]/10 border-[#FFD700]')
+                        : dm('bg-gray-50 border-gray-200', 'bg-gray-900 border-gray-800')
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-sm border-2 ${
+                        set.weight === bestSet.weight && set.reps === bestSet.reps
+                          ? 'bg-[#FFD700] text-black border-black'
+                          : dm('bg-gray-200 text-gray-600 border-gray-300', 'bg-gray-700 text-gray-300 border-gray-600')
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <div className={`font-extrabold ${dm('text-black', 'text-white')}`}>
+                          {set.weight}kg × {set.reps}
+                        </div>
+                        <div className={`text-xs ${dm('text-gray-500', 'text-gray-400')} font-medium`}>
+                          e1RM: {set.e1rm.toFixed(1)}kg
+                        </div>
+                      </div>
+                    </div>
+                    {set.weight === bestSet.weight && set.reps === bestSet.reps && (
+                      <div className="text-xl">👑</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Motivational Message */}
+          <div className="bg-[#00C805] border-4 border-black rounded-2xl p-6 mb-6 max-w-md w-full text-black">
+            <div className="text-3xl mb-3">💪</div>
+            <h3 className="text-xl font-extrabold mb-2 uppercase tracking-wide">
+              Your Journey Begins Now!
+            </h3>
+            <p className="text-sm leading-relaxed font-medium">
+              Excellent work establishing your baseline! From now on, you'll receive personalized recommendations to progressively increase your strength. Every workout builds on this foundation.
+            </p>
+          </div>
+
+          {/* Next Steps Preview */}
+          {rewardData.nextGoal && (
+            <div className={`border-2 ${dm('bg-blue-50 border-blue-400', 'bg-blue-900/20 border-blue-600')} rounded-2xl p-5 mb-8 max-w-md w-full`}>
+              <div className="flex items-start gap-3">
+                <div className="text-3xl">🎯</div>
+                <div className="flex-1">
+                  <div className={`font-extrabold mb-1 uppercase tracking-wide text-sm ${dm('text-blue-900', 'text-blue-300')}`}>
+                    Next Workout Target
+                  </div>
+                  <div className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                    {rewardData.nextGoal.weight}kg × {rewardData.nextGoal.targetReps} reps
+                  </div>
+                  <div className={`text-xs ${dm('text-gray-500', 'text-gray-400')} mt-1 font-medium`}>
+                    Based on your {rewardData.phase || 'hypertrophy'} training phase
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Continue Button */}
+          <button
+            onClick={() => {
+              setShowRewardScreen(false);
+              setRewardData(null);
+              setActiveTab('detail');
+              setSelectedExercise(rewardData.exerciseName);
+            }}
+            className={`w-full max-w-md h-16 font-extrabold text-xl rounded-full border-4 transition-transform active:scale-95 ${dm('bg-black text-white border-black', 'bg-white text-black border-white')}`}
+          >
+            Continue Training
+          </button>
         </div>
       </div>
     );
