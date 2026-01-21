@@ -23,6 +23,7 @@ import {
   PHASE_CONFIG,
   EXERCISE_CONFIG,
   getExerciseConfig,
+  analyzeBenchmarkSession,
 } from './recommendation-engine.js';
 
 // ============================================================================
@@ -263,7 +264,7 @@ describe('getExerciseConfig', () => {
 // ============================================================================
 
 describe('generateRecommendation - First Session', () => {
-  it('should return first session calibration for no history', () => {
+  it('should return benchmark mode for no history', () => {
     const recommendation = generateRecommendation({
       exercise: 'Squat',
       history: [],
@@ -271,12 +272,13 @@ describe('generateRecommendation - First Session', () => {
       phase: 'hypertrophy'
     });
 
-    expect(recommendation.flags).toContain('first_session_calibration');
-    expect(recommendation.prescription.sets).toBe(3);
-    expect(recommendation.prescription.reps).toBe('8-10');
+    expect(recommendation.flags).toContain('benchmark_mode');
+    expect(recommendation.benchmark_mode).toBe(true);
+    expect(recommendation.prescription.sets).toBe('3-5');
+    expect(recommendation.prescription.reps).toBe('5-12');
     expect(recommendation.prescription.weight_kg).toBeNull();
-    expect(recommendation.training_status).toBe('insufficient_data');
-    expect(recommendation.progression_rationale).toContain('First session');
+    expect(recommendation.training_status).toBe('benchmark_mode');
+    expect(recommendation.progression_rationale).toContain('benchmark');
   });
 });
 
@@ -491,7 +493,155 @@ describe('Output Interface Validation', () => {
     expect(typeof recommendation.intensity_percent).toBe('number');
     expect(typeof recommendation.calculated_e1rm_kg).toBe('number');
     expect(typeof recommendation.progression_rationale).toBe('string');
-    expect(['progressing', 'plateau', 'regressing', 'insufficient_data']).toContain(recommendation.training_status);
+    expect(['progressing', 'plateau', 'regressing', 'insufficient_data', 'benchmark_mode', 'progressive']).toContain(recommendation.training_status);
     expect(recommendation.flags === null || Array.isArray(recommendation.flags)).toBe(true);
+  });
+});
+
+// ============================================================================
+// BENCHMARK MODE TESTS
+// ============================================================================
+
+describe('Benchmark Mode', () => {
+  it('should return benchmark mode for first session', () => {
+    const recommendation = generateRecommendation({
+      exercise: 'Bench Press',
+      history: [],
+      userAge: 25,
+      phase: 'hypertrophy'
+    });
+
+    expect(recommendation.benchmark_mode).toBe(true);
+    expect(recommendation.training_status).toBe('benchmark_mode');
+    expect(recommendation.flags).toContain('benchmark_mode');
+    expect(recommendation.prescription.sets).toBe('3-5');
+    expect(recommendation.prescription.reps).toBe('5-12');
+    expect(recommendation.prescription.weight_kg).toBeNull();
+    expect(recommendation.prescription.benchmark_instructions).toBeDefined();
+    expect(recommendation.prescription.benchmark_instructions.instructions).toHaveLength(4);
+  });
+
+  it('should analyze benchmark session correctly with multiple sets', () => {
+    const benchmarkHistory = [
+      { date: '2026-01-20', weight: 60, reps: 10, rir: 2, isActive: true },
+      { date: '2026-01-20', weight: 70, reps: 8, rir: 1, isActive: true },
+      { date: '2026-01-20', weight: 80, reps: 6, rir: 1, isActive: true },
+      { date: '2026-01-20', weight: 85, reps: 4, rir: 0, isActive: true },
+    ];
+
+    const analysis = analyzeBenchmarkSession(benchmarkHistory, 'Bench Press');
+
+    expect(analysis.benchmarkCompleted).toBe(true);
+    expect(analysis.totalSets).toBe(4);
+    expect(analysis.highestE1RM).toBeGreaterThan(0);
+    expect(analysis.bestSet).toBeDefined();
+    // 80kg × 6 reps (RIR 1) = effective 7 reps = 96kg e1RM
+    // 85kg × 4 reps (RIR 0) = effective 4 reps = 92.7kg e1RM
+    // So 80kg set has highest e1RM
+    expect(analysis.bestSet.weight).toBe(80);
+    expect(analysis.allSets).toHaveLength(4);
+  });
+
+  it('should generate progressive recommendation after benchmark', () => {
+    const benchmarkHistory = [
+      { name: 'Squat', date: '2026-01-20', weight: 100, reps: 8, rir: 2, isActive: true },
+      { name: 'Squat', date: '2026-01-20', weight: 110, reps: 6, rir: 1, isActive: true },
+      { name: 'Squat', date: '2026-01-20', weight: 120, reps: 5, rir: 1, isActive: true },
+    ];
+
+    const recommendation = generateRecommendation({
+      exercise: 'Squat',
+      history: benchmarkHistory,
+      userAge: 30,
+      phase: 'hypertrophy'
+    });
+
+    expect(recommendation.benchmark_mode).toBe(false);
+    expect(recommendation.flags).toContain('post_benchmark_first_prescription');
+    expect(recommendation.prescription.weight_kg).toBeGreaterThan(0);
+    expect(recommendation.benchmark_baseline).toBeDefined();
+    expect(recommendation.benchmark_baseline.e1rm).toBeGreaterThan(0);
+    expect(recommendation.benchmark_baseline.bestSet).toBeDefined();
+    expect(recommendation.training_status).toBe('progressive');
+  });
+
+  it('should handle single set benchmark', () => {
+    const benchmarkHistory = [
+      { date: '2026-01-20', weight: 50, reps: 10, rir: 3, isActive: true },
+    ];
+
+    const analysis = analyzeBenchmarkSession(benchmarkHistory, 'Overhead Press');
+
+    expect(analysis.benchmarkCompleted).toBe(true);
+    expect(analysis.totalSets).toBe(1);
+    expect(analysis.bestSet.weight).toBe(50);
+    expect(analysis.highestE1RM).toBeGreaterThan(0);
+  });
+
+  it('should apply exercise-specific modifiers to benchmark e1RM', () => {
+    const benchmarkHistory = [
+      { date: '2026-01-20', weight: 100, reps: 5, rir: 1, isActive: true },
+    ];
+
+    const frontSquatAnalysis = analyzeBenchmarkSession(benchmarkHistory, 'Front Squat');
+    const backSquatAnalysis = analyzeBenchmarkSession(benchmarkHistory, 'Squat');
+
+    // Front Squat has 0.82 modifier, Back Squat has 1.0
+    expect(frontSquatAnalysis.highestE1RM).toBeLessThan(backSquatAnalysis.highestE1RM);
+    expect(frontSquatAnalysis.highestE1RM).toBeCloseTo(backSquatAnalysis.highestE1RM * 0.82, 1);
+  });
+
+  it('should return failure for empty benchmark history', () => {
+    const analysis = analyzeBenchmarkSession([], 'Bench Press');
+
+    expect(analysis.benchmarkCompleted).toBe(false);
+    expect(analysis.highestE1RM).toBe(0);
+    expect(analysis.bestSet).toBeNull();
+    expect(analysis.totalSets).toBe(0);
+  });
+
+  it('should calculate correct e1RM for each benchmark set', () => {
+    const benchmarkHistory = [
+      { date: '2026-01-20', weight: 60, reps: 10, rir: 2, isActive: true },
+      { date: '2026-01-20', weight: 80, reps: 6, rir: 1, isActive: true },
+    ];
+
+    const analysis = analyzeBenchmarkSession(benchmarkHistory, 'Bench Press');
+
+    expect(analysis.allSets).toHaveLength(2);
+    expect(analysis.allSets[0].weight).toBe(60);
+    expect(analysis.allSets[0].reps).toBe(10);
+    expect(analysis.allSets[0].e1rm).toBeGreaterThan(0);
+    expect(analysis.allSets[1].weight).toBe(80);
+    expect(analysis.allSets[1].reps).toBe(6);
+    expect(analysis.allSets[1].e1rm).toBeGreaterThan(0);
+  });
+
+  it('should use correct baseline e1RM for post-benchmark prescription', () => {
+    const benchmarkHistory = [
+      { name: 'Deadlift', date: '2026-01-20', weight: 100, reps: 5, rir: 1, isActive: true },
+      { name: 'Deadlift', date: '2026-01-20', weight: 120, reps: 3, rir: 0, isActive: true },
+    ];
+
+    const recommendation = generateRecommendation({
+      exercise: 'Deadlift',
+      history: benchmarkHistory,
+      userAge: 30,
+      phase: 'strength'
+    });
+
+    // Calculate expected e1RM from best set (120kg × 3 reps, RIR 0)
+    const expectedE1RM = calculateE1RM(120, 3, 0);
+
+    expect(recommendation.benchmark_baseline.e1rm).toBeCloseTo(expectedE1RM, 1);
+    expect(recommendation.calculated_e1rm_kg).toBeCloseTo(expectedE1RM, 1);
+
+    // For strength phase, intensity is 80-88%, average 84%
+    const targetIntensity = 0.84;
+    const expectedWeight = Math.round((expectedE1RM * targetIntensity) / 5) * 5; // Deadlift uses 5kg increments
+
+    // Allow for rounding differences due to increment adjustment
+    expect(recommendation.prescription.weight_kg).toBeGreaterThanOrEqual(expectedWeight - 5);
+    expect(recommendation.prescription.weight_kg).toBeLessThanOrEqual(expectedWeight + 5);
   });
 });

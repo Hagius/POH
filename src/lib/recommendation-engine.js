@@ -252,6 +252,55 @@ function getHighestE1RMInRange(history, daysAgoStart, daysAgoEnd) {
 }
 
 /**
+ * Analyzes a benchmark session (first session only) to extract the best performance
+ * @param {WorkoutEntry[]} sessionHistory - All entries from the first session date
+ * @param {string} exerciseName - Name of the exercise
+ * @returns {Object} - Benchmark analysis results
+ */
+function analyzeBenchmarkSession(sessionHistory, exerciseName) {
+  if (!sessionHistory || sessionHistory.length === 0) {
+    return {
+      benchmarkCompleted: false,
+      highestE1RM: 0,
+      bestSet: null,
+      totalSets: 0,
+      allSets: []
+    };
+  }
+
+  const exerciseConfig = getExerciseConfig(exerciseName);
+
+  // Calculate e1RM for each set
+  const setsWithE1RM = sessionHistory.map(entry => ({
+    weight: entry.weight,
+    reps: entry.reps,
+    rir: entry.rir,
+    e1rm: calculateE1RM(entry.weight, entry.reps, entry.rir)
+  }));
+
+  // Find the best set
+  const bestSet = setsWithE1RM.reduce((best, current) =>
+    current.e1rm > best.e1rm ? current : best
+  );
+
+  // Apply exercise-specific e1RM modifier
+  const adjustedE1RM = bestSet.e1rm * (exerciseConfig.e1rm_modifier || 1.0);
+
+  return {
+    benchmarkCompleted: true,
+    highestE1RM: adjustedE1RM,
+    bestSet: {
+      weight: bestSet.weight,
+      reps: bestSet.reps,
+      rir: bestSet.rir,
+      e1rm: adjustedE1RM
+    },
+    totalSets: sessionHistory.length,
+    allSets: setsWithE1RM
+  };
+}
+
+/**
  * Get the most recent workout entry
  * @param {WorkoutEntry[]} history
  * @returns {WorkoutEntry|null}
@@ -487,61 +536,64 @@ export function generateRecommendation(request) {
   const daysSinceLastSession = getDaysSinceLastSession(activeHistory);
 
   // =========================================================================
-  // EDGE CASE: First Session (no history)
+  // EDGE CASE: First Session (no history) - BENCHMARK MODE
   // =========================================================================
   if (activeHistory.length === 0) {
-    flags.push('first_session_calibration');
+    flags.push('benchmark_mode');
 
     return {
       exercise,
+      benchmark_mode: true,
       prescription: {
-        sets: 3,
-        reps: '8-10',
-        weight_kg: null, // User needs to calibrate
-        rest_seconds: '120',
-        rir_target: 3
+        sets: '3-5',
+        reps: '5-12',
+        weight_kg: null,
+        rest_seconds: '90-120',
+        rir_target: 3,
+        benchmark_instructions: {
+          title: 'Benchmark Session',
+          subtitle: 'Find Your Starting Point',
+          instructions: [
+            'Start with a comfortable weight you can lift 8-10 times',
+            'Perform 3-5 sets, adjusting weight each set',
+            'Try to reach near-failure (1-2 reps left in tank)',
+            'Your best set will become your baseline'
+          ]
+        }
       },
-      intensity_percent: 60,
+      intensity_percent: null,
       calculated_e1rm_kg: 0,
-      training_status: 'insufficient_data',
-      progression_rationale: 'First session. Perform 3×8-10 at RPE 6-7. Record weight for calibration.',
+      training_status: 'benchmark_mode',
+      progression_rationale: 'This is your benchmark session! Explore different weights to establish your baseline. Your strongest set will be used as your starting point.',
       flags,
-      reasoning_breakdown: buildReasoningBreakdown({
-        lastEntry: null,
-        trainingStatus: 'insufficient_data',
-        prescribedWeight: null,
-        targetReps: null,
-        phaseConfig,
-        exerciseConfig,
-        currentE1RM: 0,
-        previousE1RM: 0
-      })
+      reasoning_breakdown: {
+        last_session: 'No previous data - benchmark mode activated',
+        trend: 'Establishing baseline',
+        next_step: 'Complete 3-5 sets at varying weights to find your working load',
+        calculation: 'Your highest e1RM from all sets will be used as your baseline'
+      }
     };
   }
 
   // =========================================================================
-  // Calculate e1RM values
-  // =========================================================================
-  const currentE1RM = getHighestE1RMInRange(activeHistory, 0, 14);
-  const previousE1RM = getHighestE1RMInRange(activeHistory, 28, 42);
-  const allTimeE1RM = Math.max(...activeHistory.map(e => calculateE1RM(e.weight, e.reps, e.rir)));
-
-  // Use current e1RM, fallback to most recent entry
-  let workingE1RM = currentE1RM;
-  if (workingE1RM <= 0) {
-    const lastEntry = getMostRecentEntry(activeHistory);
-    workingE1RM = lastEntry ? calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir) : 0;
-  }
-
-  // Apply e1RM modifier if applicable (e.g., front squat)
-  if (exerciseConfig.e1rm_modifier) {
-    workingE1RM = workingE1RM * exerciseConfig.e1rm_modifier;
-  }
-
-  // =========================================================================
   // EDGE CASE: Returning from break (>14 days)
+  // Check this BEFORE post-benchmark to avoid treating old sessions as benchmark
   // =========================================================================
   if (daysSinceLastSession !== null && daysSinceLastSession > 14) {
+    // Calculate e1RM values first for return from break logic
+    const currentE1RM = getHighestE1RMInRange(activeHistory, 0, 14);
+    const previousE1RM = getHighestE1RMInRange(activeHistory, 28, 42);
+
+    let workingE1RM = currentE1RM;
+    if (workingE1RM <= 0) {
+      const lastEntry = getMostRecentEntry(activeHistory);
+      workingE1RM = lastEntry ? calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir) : 0;
+    }
+
+    if (exerciseConfig.e1rm_modifier) {
+      workingE1RM = workingE1RM * exerciseConfig.e1rm_modifier;
+    }
+
     flags.push('returning_from_break');
 
     const reductionPercent = daysSinceLastSession > 28 ? 0.15 : 0.10;
@@ -577,6 +629,106 @@ export function generateRecommendation(request) {
       })
     };
   }
+
+  // =========================================================================
+  // EDGE CASE: Post-Benchmark (exactly 1 session completed AND not returning from break)
+  // =========================================================================
+  if (sessionCount === 1) {
+    // User has completed benchmark, now transitioning to progressive training
+    const allDates = [...new Set(activeHistory.map(e => e.date))].sort();
+    const benchmarkDate = allDates[0];
+    const benchmarkHistory = activeHistory.filter(e => e.date === benchmarkDate);
+    const benchmarkAnalysis = analyzeBenchmarkSession(benchmarkHistory, exercise);
+
+    if (!benchmarkAnalysis.benchmarkCompleted) {
+      // Fallback if benchmark analysis fails
+      flags.push('benchmark_analysis_failed');
+      return {
+        exercise,
+        prescription: {
+          sets: 3,
+          reps: '8-10',
+          weight_kg: null,
+          rest_seconds: '120',
+          rir_target: 3
+        },
+        intensity_percent: 60,
+        calculated_e1rm_kg: 0,
+        training_status: 'insufficient_data',
+        progression_rationale: 'Unable to analyze benchmark session. Please ensure you logged at least one set with weight and reps.',
+        flags,
+        reasoning_breakdown: buildReasoningBreakdown({
+          lastEntry: null,
+          trainingStatus: 'insufficient_data',
+          prescribedWeight: null,
+          targetReps: null,
+          phaseConfig,
+          exerciseConfig,
+          currentE1RM: 0,
+          previousE1RM: 0
+        })
+      };
+    }
+
+    flags.push('post_benchmark_first_prescription');
+
+    // Use benchmark e1RM as baseline
+    const baselineE1RM = benchmarkAnalysis.highestE1RM;
+    const targetIntensity = (phaseConfig.intensity_range[0] + phaseConfig.intensity_range[1]) / 2;
+    const targetWeight = baselineE1RM * targetIntensity;
+    const prescribedWeight = roundToIncrement(targetWeight);
+    const targetReps = Math.floor((phaseConfig.rep_min + phaseConfig.rep_max) / 2);
+    const adjustedSets = getAdjustedSets(phaseConfig.base_sets, userAge);
+
+    return {
+      exercise,
+      benchmark_mode: false,
+      benchmark_baseline: {
+        e1rm: benchmarkAnalysis.highestE1RM,
+        bestSet: benchmarkAnalysis.bestSet,
+        sessionDate: benchmarkDate
+      },
+      prescription: {
+        sets: adjustedSets,
+        reps: `${phaseConfig.rep_min}-${phaseConfig.rep_max}`,
+        target_reps: targetReps,
+        weight_kg: prescribedWeight,
+        rest_seconds: phaseConfig.rest_seconds,
+        rir_target: phaseConfig.rir_target
+      },
+      intensity_percent: Math.round(targetIntensity * 100),
+      calculated_e1rm_kg: baselineE1RM,
+      training_status: 'progressive',
+      progression_rationale: `Benchmark complete! Your baseline: ${Math.round(baselineE1RM)}kg e1RM. Starting ${phase} training at ${Math.round(targetIntensity * 100)}% intensity.`,
+      flags,
+      reasoning_breakdown: {
+        last_session: `Benchmark: ${benchmarkAnalysis.bestSet.weight}kg × ${benchmarkAnalysis.bestSet.reps} reps`,
+        trend: 'Baseline established',
+        next_step: `Progressive training begins at ${prescribedWeight}kg`,
+        calculation: `${Math.round(targetIntensity * 100)}% of ${Math.round(baselineE1RM)}kg e1RM = ${prescribedWeight}kg`
+      }
+    };
+  }
+
+  // =========================================================================
+  // Calculate e1RM values
+  // =========================================================================
+  const currentE1RM = getHighestE1RMInRange(activeHistory, 0, 14);
+  const previousE1RM = getHighestE1RMInRange(activeHistory, 28, 42);
+  const allTimeE1RM = Math.max(...activeHistory.map(e => calculateE1RM(e.weight, e.reps, e.rir)));
+
+  // Use current e1RM, fallback to most recent entry
+  let workingE1RM = currentE1RM;
+  if (workingE1RM <= 0) {
+    const lastEntry = getMostRecentEntry(activeHistory);
+    workingE1RM = lastEntry ? calculateE1RM(lastEntry.weight, lastEntry.reps, lastEntry.rir) : 0;
+  }
+
+  // Apply e1RM modifier if applicable (e.g., front squat)
+  if (exerciseConfig.e1rm_modifier) {
+    workingE1RM = workingE1RM * exerciseConfig.e1rm_modifier;
+  }
+
 
   // =========================================================================
   // EDGE CASE: Significant regression (e1RM dropped >10%)
@@ -874,3 +1026,6 @@ export default {
   EXERCISE_CONFIG,
   getExerciseConfig
 };
+
+// Export analyzeBenchmarkSession for UI use
+export { analyzeBenchmarkSession };

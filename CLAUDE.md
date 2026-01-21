@@ -270,6 +270,108 @@ Example: `test_calculate_progressive_overload_with_valid_data_returns_correct_in
    - Personal records (PRs)
    - Volume calculations (sets × reps × weight)
 
+### Benchmark Sessions
+
+**Feature implemented**: 2026-01-21
+
+When a user logs their first session for an exercise, the system enters **Benchmark Mode** - a special calibration phase designed to establish an accurate baseline for progressive overload.
+
+#### How It Works
+
+1. **Pre-Benchmark Screen** (`BenchmarkIntroScreen`)
+   - Full-screen motivational explanation
+   - Clear instructions for the user
+   - Reduces intimidation factor for beginners
+   - Location: `/home/user/POH/src/ProgressiveOverloadTracker.jsx`
+
+2. **Benchmark Logging**
+   - User performs 3-5 sets at varying weights
+   - System tracks all sets during the session
+   - Flexible rep range (5-12 reps) encourages exploration
+   - Special UI banner shows progress (e.g., "3/5 sets logged")
+   - Location: Log view with `currentRecommendation.benchmark_mode` check
+
+3. **Benchmark Analysis** (`analyzeBenchmarkSession`)
+   - Calculates e1RM for each logged set
+   - Selects the set with highest e1RM as baseline
+   - Applies exercise-specific modifiers (e.g., Front Squat = 0.82x)
+   - Location: `/home/user/POH/src/lib/recommendation-engine.js:254-300`
+
+4. **Benchmark Reward Screen** (`BenchmarkRewardScreen`)
+   - Special celebration screen (different from normal rewards)
+   - Shows baseline e1RM prominently
+   - Displays all sets with best set highlighted (👑)
+   - Motivational messaging: "Your Journey Begins Now!"
+   - Preview of next workout target
+   - Location: `/home/user/POH/src/ProgressiveOverloadTracker.jsx`
+
+5. **Post-Benchmark**
+   - Next session receives progressive prescription
+   - System uses established baseline for intensity calculations
+   - Training status: `'progressive'`
+   - Flag: `'post_benchmark_first_prescription'`
+
+#### Code Locations
+
+| Component | File | Lines | Purpose |
+|-----------|------|-------|---------|
+| Benchmark Detection | recommendation-engine.js | 541-576 | Returns `benchmark_mode: true` |
+| Benchmark Analysis | recommendation-engine.js | 254-300 | Analyzes sets, finds best e1RM |
+| Post-Benchmark Logic | recommendation-engine.js | 578-656 | First prescription after benchmark |
+| Intro Screen | ProgressiveOverloadTracker.jsx | ~2175-2275 | Motivational pre-session UI |
+| Banner UI | ProgressiveOverloadTracker.jsx | ~1950-1975 | In-session benchmark indicator |
+| Reward Screen | ProgressiveOverloadTracker.jsx | ~2320-2470 | Post-benchmark celebration |
+| Tests | recommendation-engine.test.js | 500-641 | 8 test cases for benchmark mode |
+
+#### Design Philosophy
+
+- **Swiss Style / Neo-Brutalism**: Bold typography, high contrast, minimal gradients
+- **Color Coding**: Gold (#FFD700) for benchmark mode, Green (#00C805) for success
+- **Progressive Disclosure**: Information revealed when needed, not all at once
+- **Motivational**: Reduces first-session anxiety with clear guidance
+
+#### Testing
+
+50 test cases total, including:
+- `should return benchmark mode for first session`
+- `should analyze benchmark session correctly with multiple sets`
+- `should generate progressive recommendation after benchmark`
+- `should apply exercise-specific modifiers to benchmark e1RM`
+- `should use correct baseline e1RM for post-benchmark prescription`
+
+All tests passing ✓
+
+#### User Flow Example
+
+```
+User selects "Bench Press" (no history)
+    ↓
+BenchmarkIntroScreen displays
+    "Let's Find Your Starting Point!"
+    Instructions + Motivation
+    ↓
+User clicks "Start Benchmark Session"
+    ↓
+Log View opens with gold banner
+    "Benchmark Mode Active - Log 3-5 sets"
+    Progress indicator: 0/5 sets
+    ↓
+User logs:
+    Set 1: 60kg × 10 reps (e1RM: 80kg)
+    Set 2: 70kg × 8 reps (e1RM: 87.5kg)
+    Set 3: 80kg × 6 reps (e1RM: 96kg) ← BEST
+    ↓
+User slides to log
+    ↓
+BenchmarkRewardScreen displays
+    "Baseline Established! 96.0kg e1RM"
+    Shows all 3 sets with Set 3 highlighted 👑
+    "Your Journey Begins Now!"
+    Next target: 70kg × 10 reps (hypertrophy)
+    ↓
+User continues training with personalized recommendations
+```
+
 ### Data Modeling Considerations
 
 When implementing the data model, consider:
