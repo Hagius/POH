@@ -1629,81 +1629,152 @@ export default function ProgressiveOverloadTracker() {
 
         {/* 2. Recommendation */}
         {recommendation && (
-          <div className={`mx-6 p-5 rounded-3xl mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
-            <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Next Session</span>
-            <div className="flex items-baseline mt-2">
-              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
-                {recommendation.nextWorkout.weight}
-              </span>
-              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
-              <span className={dm('mx-3 text-gray-300', 'mx-3 text-gray-600')}>×</span>
-              <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
-                {recommendation.nextWorkout.targetReps}
-              </span>
-              <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
-            </div>
-            <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+          recommendation.benchmark_mode ? (
+            // Benchmark Mode Card - Special design
+            <div className={`mx-6 mb-6 border-4 ${dm('bg-[#FFF8E7] border-[#FFD700]', 'bg-[#332200] border-[#FFD700]')} rounded-3xl p-6`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">🎯</span>
+                <span className={`text-xs font-extrabold uppercase tracking-[0.2em] ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                  Benchmark Session
+                </span>
+              </div>
 
-            {/* Detailed Reasoning Breakdown */}
-            {recommendation.reasoning_breakdown && (
-              <div className={`mt-4 pt-4 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+              <h3 className={`text-2xl font-extrabold mb-3 ${dm('text-black', 'text-white')}`}>
+                Let's Find Your Starting Point
+              </h3>
+
+              <p className={`text-sm leading-relaxed mb-4 font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
+                This is your <strong>calibration workout</strong>. Perform 3-5 sets at different weights to discover your working capacity. Your best set will become your baseline.
+              </p>
+
+              {/* Instructions */}
+              <div className={`${dm('bg-white/50', 'bg-black/30')} border-2 ${dm('border-[#FFD700]/30', 'border-[#FFD700]/50')} rounded-xl p-4 mb-4`}>
+                <div className={`text-xs font-extrabold uppercase tracking-wide mb-3 ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                  How It Works
+                </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Last Session</span>
-                    <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.last_session}</span>
+                  {recommendation.prescription.benchmark_instructions.instructions.map((instruction, idx) => (
+                    <div key={idx} className="flex items-start gap-2">
+                      <span className={`font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')} mt-0.5`}>•</span>
+                      <span className={`text-xs leading-relaxed font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
+                        {instruction}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommendation range hint */}
+              <div className={`flex items-center justify-center gap-4 mb-4 p-3 rounded-lg ${dm('bg-white/30', 'bg-black/20')}`}>
+                <div className="text-center">
+                  <div className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                    {recommendation.prescription.sets}
                   </div>
-                  <div className="flex justify-between items-start">
-                    <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Trend</span>
-                    <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.trend}</span>
+                  <div className={`text-xs uppercase tracking-wide font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                    Sets
                   </div>
-                  <div className={`pt-2 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
-                    <p className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.next_step}</p>
+                </div>
+                <div className={`text-2xl ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>×</div>
+                <div className="text-center">
+                  <div className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                    {recommendation.prescription.reps}
+                  </div>
+                  <div className={`text-xs uppercase tracking-wide font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                    Reps
                   </div>
                 </div>
               </div>
-            )}
 
-            <button
-              onClick={() => openLogView(selectedExercise)}
-              className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
-            >
-              Start Now
-            </button>
+              {/* CTA */}
+              <button
+                onClick={() => openLogView(selectedExercise)}
+                className={`w-full py-4 rounded-full font-extrabold text-base border-4 transition-transform active:scale-95 ${dm('bg-black text-white border-black', 'bg-white text-black border-white')}`}
+              >
+                Start Benchmark Session
+              </button>
 
-            {/* User Feedback */}
-            <div className={`mt-3 pt-3 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
-              <p className={`text-xs mb-2 ${dm('text-gray-400', 'text-gray-500')}`}>Is this recommendation appropriate?</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    console.log('Feedback: Too easy for', selectedExercise, recommendation);
-                    // TODO: Store feedback for future algorithm improvements
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
-                >
-                  Too Easy
-                </button>
-                <button
-                  onClick={() => {
-                    console.log('Feedback: Just right for', selectedExercise, recommendation);
-                    // TODO: Store feedback for future algorithm improvements
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
-                >
-                  Just Right
-                </button>
-                <button
-                  onClick={() => {
-                    console.log('Feedback: Too hard for', selectedExercise, recommendation);
-                    // TODO: Store feedback for future algorithm improvements
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
-                >
-                  Too Hard
-                </button>
+              <div className={`text-xs text-center mt-3 font-medium ${dm('text-[#8B6914]/70', 'text-[#E6C200]/70')}`}>
+                💡 Your best set will be your baseline
               </div>
             </div>
-          </div>
+          ) : (
+            // Normal Recommendation Card
+            <div className={`mx-6 p-5 rounded-3xl mb-6 ${dm('bg-gray-50', 'bg-gray-900')}`}>
+              <span className={`text-xs uppercase tracking-[0.2em] ${dm('text-gray-400', 'text-gray-500')}`}>Next Session</span>
+              <div className="flex items-baseline mt-2">
+                <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  {recommendation.nextWorkout.weight}
+                </span>
+                <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
+                <span className={dm('mx-3 text-gray-300', 'mx-3 text-gray-600')}>×</span>
+                <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  {recommendation.nextWorkout.targetReps}
+                </span>
+                <span className={`text-lg ml-1 ${dm('text-gray-400', 'text-gray-500')}`}>reps</span>
+              </div>
+              <p className={`text-sm mt-3 ${dm('text-gray-500', 'text-gray-400')}`}>{recommendation.message}</p>
+
+              {/* Detailed Reasoning Breakdown */}
+              {recommendation.reasoning_breakdown && (
+                <div className={`mt-4 pt-4 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start">
+                      <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Last Session</span>
+                      <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.last_session}</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className={`text-xs font-medium uppercase tracking-wide ${dm('text-gray-400', 'text-gray-500')}`}>Trend</span>
+                      <span className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.trend}</span>
+                    </div>
+                    <div className={`pt-2 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+                      <p className={`text-xs ${dm('text-gray-600', 'text-gray-400')}`}>{recommendation.reasoning_breakdown.next_step}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => openLogView(selectedExercise)}
+                className={`w-full mt-4 py-3 rounded-full font-semibold text-base ${dm('bg-black text-white', 'bg-white text-black')}`}
+              >
+                Start Now
+              </button>
+
+              {/* User Feedback */}
+              <div className={`mt-3 pt-3 border-t ${dm('border-gray-200', 'border-gray-800')}`}>
+                <p className={`text-xs mb-2 ${dm('text-gray-400', 'text-gray-500')}`}>Is this recommendation appropriate?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      console.log('Feedback: Too easy for', selectedExercise, recommendation);
+                      // TODO: Store feedback for future algorithm improvements
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                  >
+                    Too Easy
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Feedback: Just right for', selectedExercise, recommendation);
+                      // TODO: Store feedback for future algorithm improvements
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                  >
+                    Just Right
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Feedback: Too hard for', selectedExercise, recommendation);
+                      // TODO: Store feedback for future algorithm improvements
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${dm('bg-gray-200 text-gray-700 hover:bg-gray-300', 'bg-gray-800 text-gray-300 hover:bg-gray-700')}`}
+                  >
+                    Too Hard
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
         )}
 
         {/* 3. Personal Record */}
