@@ -1630,72 +1630,63 @@ export default function ProgressiveOverloadTracker() {
         {/* 2. Recommendation */}
         {recommendation && (
           recommendation.benchmark_mode ? (
-            // Benchmark Mode Card - Special design
-            <div className={`mx-6 mb-6 border-4 ${dm('bg-[#FFF8E7] border-[#FFD700]', 'bg-[#332200] border-[#FFD700]')} rounded-3xl p-6`}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">🎯</span>
-                <span className={`text-xs font-extrabold uppercase tracking-[0.2em] ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
-                  Benchmark Session
-                </span>
+            // Benchmark Mode Card - Minimalist Design
+            <div className={`mx-6 mb-6 border ${dm('bg-white border-gray-200', 'bg-gray-900 border-gray-800')} rounded-3xl p-8`}>
+              {/* Header */}
+              <div className="mb-8">
+                <div className={`text-xs uppercase tracking-[0.2em] font-medium mb-2 ${dm('text-gray-400', 'text-gray-500')}`}>
+                  First Session
+                </div>
+                <h3 className={`text-3xl font-bold mb-4 leading-tight ${dm('text-black', 'text-white')}`}>
+                  Establish Your Baseline
+                </h3>
+                <p className={`text-sm leading-relaxed ${dm('text-gray-600', 'text-gray-400')}`}>
+                  Complete 3-5 sets at different weights. We'll use your strongest set as your starting point for progressive training.
+                </p>
               </div>
 
-              <h3 className={`text-2xl font-extrabold mb-3 ${dm('text-black', 'text-white')}`}>
-                Let's Find Your Starting Point
-              </h3>
-
-              <p className={`text-sm leading-relaxed mb-4 font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
-                This is your <strong>calibration workout</strong>. Perform 3-5 sets at different weights to discover your working capacity. Your best set will become your baseline.
-              </p>
-
-              {/* Instructions */}
-              <div className={`${dm('bg-white/50', 'bg-black/30')} border-2 ${dm('border-[#FFD700]/30', 'border-[#FFD700]/50')} rounded-xl p-4 mb-4`}>
-                <div className={`text-xs font-extrabold uppercase tracking-wide mb-3 ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
-                  How It Works
-                </div>
-                <div className="space-y-2">
-                  {recommendation.prescription.benchmark_instructions.instructions.map((instruction, idx) => (
-                    <div key={idx} className="flex items-start gap-2">
-                      <span className={`font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')} mt-0.5`}>•</span>
-                      <span className={`text-xs leading-relaxed font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
-                        {instruction}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recommendation range hint */}
-              <div className={`flex items-center justify-center gap-4 mb-4 p-3 rounded-lg ${dm('bg-white/30', 'bg-black/20')}`}>
+              {/* Recommendation Range */}
+              <div className={`flex items-center justify-center gap-8 py-8 mb-8 border-y ${dm('border-gray-100', 'border-gray-800')}`}>
                 <div className="text-center">
-                  <div className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  <div className={`text-5xl font-bold mb-2 ${dm('text-black', 'text-white')}`}>
                     {recommendation.prescription.sets}
                   </div>
-                  <div className={`text-xs uppercase tracking-wide font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                  <div className={`text-xs uppercase tracking-wider ${dm('text-gray-400', 'text-gray-500')}`}>
                     Sets
                   </div>
                 </div>
-                <div className={`text-2xl ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>×</div>
+                <div className={`text-2xl ${dm('text-gray-300', 'text-gray-700')}`}>×</div>
                 <div className="text-center">
-                  <div className={`text-2xl font-extrabold ${dm('text-black', 'text-white')}`}>
+                  <div className={`text-5xl font-bold mb-2 ${dm('text-black', 'text-white')}`}>
                     {recommendation.prescription.reps}
                   </div>
-                  <div className={`text-xs uppercase tracking-wide font-bold ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
+                  <div className={`text-xs uppercase tracking-wider ${dm('text-gray-400', 'text-gray-500')}`}>
                     Reps
                   </div>
                 </div>
               </div>
 
+              {/* Instructions */}
+              <div className="mb-8 space-y-4">
+                {recommendation.prescription.benchmark_instructions.instructions.map((instruction, idx) => (
+                  <div key={idx} className="flex items-start gap-4">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${dm('bg-gray-100 text-gray-600', 'bg-gray-800 text-gray-400')}`}>
+                      {idx + 1}
+                    </div>
+                    <p className={`text-sm leading-relaxed pt-0.5 ${dm('text-gray-600', 'text-gray-400')}`}>
+                      {instruction}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
               {/* CTA */}
               <button
                 onClick={() => openLogView(selectedExercise)}
-                className={`w-full py-4 rounded-full font-extrabold text-base border-4 transition-transform active:scale-95 ${dm('bg-black text-white border-black', 'bg-white text-black border-white')}`}
+                className={`w-full py-4 rounded-full font-semibold text-base transition-colors ${dm('bg-black text-white hover:bg-gray-900', 'bg-white text-black hover:bg-gray-100')}`}
               >
-                Start Benchmark Session
+                Start Session
               </button>
-
-              <div className={`text-xs text-center mt-3 font-medium ${dm('text-[#8B6914]/70', 'text-[#E6C200]/70')}`}>
-                💡 Your best set will be your baseline
-              </div>
             </div>
           ) : (
             // Normal Recommendation Card
@@ -2061,27 +2052,29 @@ export default function ProgressiveOverloadTracker() {
 
         {/* Benchmark Mode Banner */}
         {currentRecommendation?.benchmark_mode && (
-          <div className="bg-[#FFD700] border-4 border-black px-6 py-4 mx-6 mt-4 rounded-xl">
-            <div className="flex items-center">
-              <div className="text-3xl mr-3">🎯</div>
-              <div className="flex-1">
-                <div className="font-extrabold text-lg uppercase tracking-wide text-black">Benchmark Mode Active</div>
-                <div className="text-sm font-medium text-black/80 mt-0.5">
-                  Log 3-5 sets at different weights. Your best set will be your baseline.
-                </div>
+          <div className={`mx-6 mt-4 border ${dm('bg-gray-50 border-gray-200', 'bg-gray-900 border-gray-800')} rounded-3xl p-6`}>
+            <div className="mb-4">
+              <div className={`text-xs uppercase tracking-[0.2em] font-medium mb-2 ${dm('text-gray-400', 'text-gray-500')}`}>
+                First Session
               </div>
+              <h3 className={`text-xl font-bold mb-1 ${dm('text-black', 'text-white')}`}>
+                Benchmark Mode Active
+              </h3>
+              <p className={`text-sm leading-relaxed ${dm('text-gray-600', 'text-gray-400')}`}>
+                Log 3-5 sets at different weights. Your best set will be your baseline.
+              </p>
             </div>
 
             {/* Progress indicator */}
             {pendingSets.length > 0 && (
-              <div className="mt-3">
-                <div className="flex justify-between text-xs font-bold mb-1.5 text-black/80">
+              <div>
+                <div className={`flex justify-between text-xs font-medium mb-2 ${dm('text-gray-500', 'text-gray-400')}`}>
                   <span>Sets logged: {pendingSets.length}/5</span>
-                  <span>{pendingSets.length >= 3 ? '✓ Ready to finish' : `${3 - pendingSets.length} more recommended`}</span>
+                  <span>{pendingSets.length >= 3 ? 'Ready to finish' : `${3 - pendingSets.length} more recommended`}</span>
                 </div>
-                <div className="w-full bg-black/20 rounded-full h-2.5 border-2 border-black">
+                <div className={`w-full rounded-full h-1.5 ${dm('bg-gray-200', 'bg-gray-800')}`}>
                   <div
-                    className="bg-black rounded-full h-full transition-all duration-300"
+                    className={`rounded-full h-full transition-all duration-300 ${dm('bg-black', 'bg-white')}`}
                     style={{ width: `${Math.min((pendingSets.length / 5) * 100, 100)}%` }}
                   />
                 </div>
@@ -2338,10 +2331,9 @@ export default function ProgressiveOverloadTracker() {
     );
   }
 
-  // Benchmark Intro Screen - Motivational Pre-Session Screen
+  // Benchmark Intro Screen - Minimalist Design
   if (showBenchmarkIntro && benchmarkExercise) {
     const recommendation = getRecommendation(benchmarkExercise);
-    const muscleIcon = MUSCLE_ICONS[benchmarkExercise] || MUSCLE_ICONS['Squat'];
 
     return (
       <div className={`fixed inset-0 z-50 ${dm('bg-white', 'bg-black')} overflow-y-auto`}>
@@ -2352,66 +2344,48 @@ export default function ProgressiveOverloadTracker() {
               setShowBenchmarkIntro(false);
               setBenchmarkExercise(null);
             }}
-            className={`text-2xl font-bold ${dm('text-black', 'text-white')}`}
+            className={`text-2xl font-semibold ${dm('text-black', 'text-white')}`}
           >
             ←
           </button>
         </div>
 
-        <div className="px-6 pb-8 max-w-md mx-auto">
-          {/* Hero Icon */}
-          <div className="text-center mt-12 mb-8">
-            <div className={`text-8xl mb-4 ${dm('text-gray-400', 'text-gray-500')}`}>
-              {muscleIcon}
+        <div className="px-8 pb-8 max-w-md mx-auto">
+          {/* Header */}
+          <div className="mt-16 mb-12">
+            <div className={`text-xs uppercase tracking-[0.2em] font-medium mb-3 ${dm('text-gray-400', 'text-gray-500')}`}>
+              First Session
             </div>
-            <h1 className={`text-4xl font-extrabold mb-2 ${dm('text-black', 'text-white')} leading-tight`}>
-              Let's Find Your<br />Starting Point!
+            <h1 className={`text-4xl font-bold mb-4 ${dm('text-black', 'text-white')} leading-tight`}>
+              Establish Your Baseline
             </h1>
             <p className={`text-lg font-medium ${dm('text-gray-500', 'text-gray-400')}`}>
               {benchmarkExercise}
             </p>
           </div>
 
-          {/* Explanation Card - Bold Neo-Brutalism */}
-          <div className={`border-4 ${dm('bg-[#FFF8E7] border-[#FFD700]', 'bg-[#332200] border-[#FFD700]')} rounded-2xl p-6 mb-6`}>
-            <h2 className={`text-xl font-extrabold mb-3 uppercase tracking-wide ${dm('text-[#8B6914]', 'text-[#FFD700]')}`}>
-              📊 What's a Benchmark?
-            </h2>
-            <p className={`text-sm leading-relaxed font-medium ${dm('text-[#8B6914]', 'text-[#E6C200]')}`}>
-              This is your <strong>calibration workout</strong>. You'll perform 3-5 sets at different weights to discover your working capacity. Your best set becomes your baseline for future recommendations.
+          {/* Explanation */}
+          <div className="mb-10">
+            <p className={`text-base leading-relaxed ${dm('text-gray-600', 'text-gray-400')}`}>
+              Complete 3-5 sets at different weights. We'll use your strongest set as your starting point for progressive training.
             </p>
           </div>
 
-          {/* Instructions - Clean Boxes */}
-          <div className={`${dm('bg-gray-50', 'bg-gray-900')} border-2 ${dm('border-gray-200', 'border-gray-800')} rounded-2xl p-6 mb-6`}>
-            <h3 className={`text-lg font-extrabold mb-4 uppercase tracking-wide ${dm('text-black', 'text-white')}`}>
-              🎯 How It Works
-            </h3>
-
+          {/* Instructions */}
+          <div className="mb-12 space-y-5">
             {recommendation?.prescription?.benchmark_instructions?.instructions.map((instruction, idx) => (
-              <div key={idx} className="flex items-start mb-4 last:mb-0">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#00C805] text-white flex items-center justify-center font-extrabold text-sm mr-3 border-2 border-black">
+              <div key={idx} className="flex items-start gap-4">
+                <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${dm('bg-gray-100 text-gray-600', 'bg-gray-800 text-gray-400')}`}>
                   {idx + 1}
                 </div>
-                <p className={`text-sm leading-relaxed pt-1 font-medium ${dm('text-gray-700', 'text-gray-300')}`}>
+                <p className={`text-sm leading-relaxed pt-1 ${dm('text-gray-600', 'text-gray-400')}`}>
                   {instruction}
                 </p>
               </div>
             ))}
           </div>
 
-          {/* Motivation Box - Bold Accent */}
-          <div className="bg-[#00C805] border-4 border-black rounded-2xl p-6 mb-8 text-black">
-            <div className="text-3xl mb-3">🚀</div>
-            <h3 className="text-xl font-extrabold mb-2 uppercase tracking-wide">
-              Your Journey Starts Here
-            </h3>
-            <p className="text-sm leading-relaxed font-medium">
-              Every champion started with a first lift. This benchmark is the foundation of your progressive overload journey. Be honest, be safe, and let's discover what you're capable of!
-            </p>
-          </div>
-
-          {/* CTA Button - Bold Neo-Brutalism */}
+          {/* CTA Button */}
           <button
             onClick={() => {
               // User is ready to start benchmark
@@ -2426,9 +2400,9 @@ export default function ProgressiveOverloadTracker() {
               setPendingSets([]);
               setShowLogView(true);
             }}
-            className={`w-full h-16 font-extrabold text-xl rounded-full border-4 transition-transform active:scale-95 ${dm('bg-black text-white border-black', 'bg-white text-black border-white')}`}
+            className={`w-full py-4 font-semibold text-base rounded-full transition-colors ${dm('bg-black text-white hover:bg-gray-900', 'bg-white text-black hover:bg-gray-100')}`}
           >
-            Start Benchmark Session
+            Start Session
           </button>
 
           {/* Skip Option */}
@@ -2437,9 +2411,9 @@ export default function ProgressiveOverloadTracker() {
               setShowBenchmarkIntro(false);
               setBenchmarkExercise(null);
             }}
-            className={`w-full mt-4 py-3 text-sm font-medium ${dm('text-gray-500', 'text-gray-400')} hover:underline`}
+            className={`w-full mt-4 py-3 text-sm ${dm('text-gray-400', 'text-gray-500')}`}
           >
-            I'll do this later
+            Skip for now
           </button>
         </div>
       </div>
