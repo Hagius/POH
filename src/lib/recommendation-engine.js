@@ -986,6 +986,7 @@ export function toLegacyFormat(recommendation) {
 
   return {
     exerciseName: recommendation.exercise,
+    benchmark_mode: recommendation.benchmark_mode || false,
     currentPerformance: {
       weight: recommendation.prescription.weight_kg,
       reps: targetReps,
