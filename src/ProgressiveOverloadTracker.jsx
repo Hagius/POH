@@ -1903,6 +1903,13 @@ export default function ProgressiveOverloadTracker() {
           </button>
         </div>
 
+        {/* Exercise Name Display */}
+        <div className="px-6 py-4">
+          <h2 className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>
+            {editedEntryData.name || 'Unknown Exercise'}
+          </h2>
+        </div>
+
         <div className="flex-1 px-6 py-4 space-y-6">
           {/* Weight */}
           <div>
