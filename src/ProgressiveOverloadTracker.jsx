@@ -1882,13 +1882,35 @@ export default function ProgressiveOverloadTracker() {
 
   // Fullscreen Edit Entry View
   if (editingEntry && editedEntryData) {
+    // Defensive: ensure we have valid data to prevent crashes
+    const safeWeight = editedEntryData.weight || 0;
+    const safeReps = editedEntryData.reps || 0;
+    const safeDate = editedEntryData.date || new Date().toISOString().split('T')[0];
+    const safeName = editedEntryData.name || 'Unknown Exercise';
+    const calculated1RM = safeWeight > 0 && safeReps > 0
+      ? Math.round(calculate1RM(safeWeight, safeReps) * 10) / 10
+      : 0;
+
     return (
-      <div className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}>
+      <div
+        className={`fixed inset-0 z-50 flex flex-col ${dm('bg-white', 'bg-black')}`}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: '100vh',
+          width: '100vw',
+          overflow: 'auto'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-12 pb-4">
+        <div className="flex items-center justify-between px-6 pt-12 pb-4 flex-shrink-0">
           <button
             onClick={cancelEditingEntry}
             className={dm('text-gray-400', 'text-gray-500')}
+            type="button"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1898,25 +1920,26 @@ export default function ProgressiveOverloadTracker() {
           <button
             onClick={saveEntryChanges}
             className="text-[#00C805] font-semibold"
+            type="button"
           >
             Save
           </button>
         </div>
 
         {/* Exercise Name Display */}
-        <div className="px-6 py-4">
+        <div className="px-6 py-4 flex-shrink-0">
           <h2 className={`text-3xl font-extrabold ${dm('text-black', 'text-white')}`}>
-            {editedEntryData.name || 'Unknown Exercise'}
+            {safeName}
           </h2>
         </div>
 
-        <div className="flex-1 px-6 py-4 space-y-6">
+        <div className="flex-1 px-6 py-4 space-y-6 overflow-y-auto">
           {/* Weight */}
           <div>
             <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Weight (kg)</label>
             <input
               type="number"
-              value={editedEntryData.weight || ''}
+              value={safeWeight || ''}
               onChange={(e) => updateEditedEntryField('weight', parseFloat(e.target.value) || 0)}
               step="0.5"
               className={`w-full mt-2 px-4 py-4 text-2xl font-bold rounded-xl border-0 focus:ring-2 outline-none ${
@@ -1930,7 +1953,7 @@ export default function ProgressiveOverloadTracker() {
             <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Reps</label>
             <input
               type="number"
-              value={editedEntryData.reps || ''}
+              value={safeReps || ''}
               onChange={(e) => updateEditedEntryField('reps', parseInt(e.target.value) || 0)}
               className={`w-full mt-2 px-4 py-4 text-2xl font-bold rounded-xl border-0 focus:ring-2 outline-none ${
                 dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
@@ -1943,7 +1966,7 @@ export default function ProgressiveOverloadTracker() {
             <label className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Date</label>
             <input
               type="date"
-              value={editedEntryData.date || ''}
+              value={safeDate}
               onChange={(e) => updateEditedEntryField('date', e.target.value)}
               className={`w-full mt-2 px-4 py-4 text-lg font-medium rounded-xl border-0 focus:ring-2 outline-none ${
                 dm('text-black bg-gray-50 focus:ring-black', 'text-white bg-gray-800 focus:ring-white')
@@ -1956,7 +1979,7 @@ export default function ProgressiveOverloadTracker() {
             <span className={`text-xs uppercase tracking-[0.15em] font-medium ${dm('text-gray-400', 'text-gray-500')}`}>Calculated 1RM</span>
             <div className="flex items-baseline mt-2">
               <span className={`text-4xl font-extrabold ${dm('text-black', 'text-white')}`}>
-                {Math.round(calculate1RM(editedEntryData.weight, editedEntryData.reps) * 10) / 10}
+                {calculated1RM}
               </span>
               <span className={`text-lg ml-2 ${dm('text-gray-400', 'text-gray-500')}`}>kg</span>
             </div>
@@ -1964,13 +1987,16 @@ export default function ProgressiveOverloadTracker() {
         </div>
 
         {/* Delete button at bottom */}
-        <div className="px-6 pb-8">
+        <div className="px-6 pb-8 flex-shrink-0">
           <button
             onClick={() => {
-              deleteEntry(editedEntryData.id);
-              cancelEditingEntry();
+              if (editedEntryData?.id) {
+                deleteEntry(editedEntryData.id);
+                cancelEditingEntry();
+              }
             }}
             className="w-full py-4 text-[#FF3B30] font-medium"
+            type="button"
           >
             Delete Entry
           </button>
